@@ -4,7 +4,7 @@ import sqlite3
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton
 
 # Получаем токен из переменной окружения
-TOKEN = "7156094450:AAFJOMhaCNmLkQ2_M1gWXYGZLG-mpyuhiYw"
+TOKEN = "7208220434:AAEL3jd7Cec-0bYQ5d1ohT0zOkcoHYt-Y0s"
 bot = telebot.TeleBot(TOKEN)
 
 # Подключение к базе данных
