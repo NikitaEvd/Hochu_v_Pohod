@@ -1,37 +1,23 @@
+import os
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
-import sqlite3
+import logging
 
-TOKEN = '7208220434:AAEL3jd7Cec-0bYQ5d1ohT0zOkcoHYt-Y0s'
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+
+# Получение токена из переменной окружения
+TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# Подключение к базе данных
-conn = sqlite3.connect('hiking_bot.db', check_same_thread=False)
-cursor = conn.cursor()
+# Функция для чтения списка предметов из файла
+def read_items():
+    with open('hiking_items.txt', 'r', encoding='utf-8') as file:
+        return [line.strip() for line in file if line.strip()]
 
-# Создание таблиц
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS objects
-(id INTEGER PRIMARY KEY, name TEXT NOT NULL)
-''')
-
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS user_progress
-(user_id INTEGER PRIMARY KEY, current_object INTEGER DEFAULT 0)
-''')
-
-cursor.execute('''
-CREATE TABLE IF NOT EXISTS user_responses
-(user_id INTEGER, object_id INTEGER, status TEXT,
- PRIMARY KEY (user_id, object_id))
-''')
-
-# Добавление начальных объектов, если их нет
-cursor.execute("SELECT COUNT(*) FROM objects")
-if cursor.fetchone()[0] == 0:
-    cursor.executemany("INSERT INTO objects (name) VALUES (?)", 
-                       [('Палатка',), ('Спальник',), ('Пенка',), ('Фонарик',), ('Аптечка',)])
-conn.commit()
+# Глобальные переменные для хранения данных пользователей
+user_progress = {}
+user_responses = {}
 
 def get_start_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
@@ -50,10 +36,8 @@ def get_final_keyboard():
     return keyboard
 
 def reset_progress(user_id):
-    cursor.execute("DELETE FROM user_progress WHERE user_id = ?", (user_id,))
-    cursor.execute("DELETE FROM user_responses WHERE user_id = ?", (user_id,))
-    cursor.execute("INSERT OR REPLACE INTO user_progress (user_id, current_object) VALUES (?, 0)", (user_id,))
-    conn.commit()
+    user_progress[user_id] = 0
+    user_responses[user_id] = {}
 
 @bot.message_handler(commands=['start'])
 def start(message):
@@ -72,20 +56,16 @@ def pack(message):
 
 @bot.message_handler(func=lambda message: message.text == 'Посмотреть список')
 def show_full_list(message):
-    cursor.execute("SELECT name FROM objects ORDER BY id")
-    objects = cursor.fetchall()
-    object_list = "\n".join([f"- {obj[0]}" for obj in objects])
+    items = read_items()
+    object_list = "\n".join([f"- {item}" for item in items])
     bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}\n\nГотовы собираться?", reply_markup=get_start_keyboard())
 
 def ask_object(chat_id, user_id):
-    cursor.execute("SELECT current_object FROM user_progress WHERE user_id = ?", (user_id,))
-    current_object = cursor.fetchone()[0]
-    cursor.execute("SELECT * FROM objects ORDER BY id")
-    objects = cursor.fetchall()
+    items = read_items()
+    current_object = user_progress.get(user_id, 0)
     
-    if current_object < len(objects):
-        object = objects[current_object]
-        bot.send_message(chat_id, f"Вы собрали {object[1]}?", reply_markup=get_pack_keyboard())
+    if current_object < len(items):
+        bot.send_message(chat_id, f"Вы собрали {items[current_object]}?", reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
 
@@ -94,16 +74,11 @@ def handle_response(message):
     user_id = message.from_user.id
     response = message.text.lower()
     
-    cursor.execute("SELECT current_object FROM user_progress WHERE user_id = ?", (user_id,))
-    current_object = cursor.fetchone()[0]
-    cursor.execute("SELECT * FROM objects ORDER BY id")
-    objects = cursor.fetchall()
+    items = read_items()
+    current_object = user_progress.get(user_id, 0)
     
-    cursor.execute("INSERT OR REPLACE INTO user_responses (user_id, object_id, status) VALUES (?, ?, ?)",
-                   (user_id, objects[current_object][0], response))
-    
-    cursor.execute("UPDATE user_progress SET current_object = current_object + 1 WHERE user_id = ?", (user_id,))
-    conn.commit()
+    user_responses.setdefault(user_id, {})[items[current_object]] = response
+    user_progress[user_id] = current_object + 1
     
     ask_object(message.chat.id, user_id)
 
@@ -113,18 +88,11 @@ def finish_packing(chat_id, user_id):
     bot.send_message(chat_id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
 
 def show_lists(chat_id, user_id):
-    cursor.execute("""
-    SELECT o.name, ur.status
-    FROM objects o
-    LEFT JOIN user_responses ur ON o.id = ur.object_id AND ur.user_id = ?
-    ORDER BY o.id
-    """, (user_id,))
+    responses = user_responses.get(user_id, {})
     
-    responses = cursor.fetchall()
-    
-    packed = [item for item, status in responses if status == 'собран']
-    not_packed = [item for item, status in responses if status == 'не собран']
-    postponed = [item for item, status in responses if status == 'отложен']
+    packed = [item for item, status in responses.items() if status == 'собран']
+    not_packed = [item for item, status in responses.items() if status == 'не собран']
+    postponed = [item for item, status in responses.items() if status == 'отложен']
     
     result = "Ваши списки:\n\n"
     result += "Собрано:\n" + "\n".join(f"- {item}" for item in packed) + "\n\n"
@@ -136,36 +104,27 @@ def show_lists(chat_id, user_id):
 @bot.message_handler(func=lambda message: message.text == 'Редактировать список')
 def edit_list(message):
     user_id = message.from_user.id
-    cursor.execute("""
-    SELECT o.id, o.name, ur.status
-    FROM objects o
-    LEFT JOIN user_responses ur ON o.id = ur.object_id AND ur.user_id = ?
-    ORDER BY o.id
-    """, (user_id,))
-    
-    objects = cursor.fetchall()
+    items = read_items()
+    responses = user_responses.get(user_id, {})
     
     keyboard = InlineKeyboardMarkup()
-    for obj_id, name, status in objects:
-        status = status if status else 'Не задано'
-        keyboard.add(InlineKeyboardButton(f"{name} - {status}", callback_data=f"edit_{obj_id}"))
+    for item in items:
+        status = responses.get(item, 'Не задано')
+        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=f"edit_{item}"))
     
     bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('edit_'))
 def edit_item(call):
     user_id = call.from_user.id
-    obj_id = int(call.data.split('_')[1])
-    
-    cursor.execute("SELECT name FROM objects WHERE id = ?", (obj_id,))
-    obj_name = cursor.fetchone()[0]
+    item = call.data.split('_', 1)[1]
     
     keyboard = InlineKeyboardMarkup()
-    keyboard.add(InlineKeyboardButton("Собран", callback_data=f"status_{obj_id}_собран"))
-    keyboard.add(InlineKeyboardButton("Не собран", callback_data=f"status_{obj_id}_не собран"))
-    keyboard.add(InlineKeyboardButton("Отложен", callback_data=f"status_{obj_id}_отложен"))
+    keyboard.add(InlineKeyboardButton("Собран", callback_data=f"status_{item}_собран"))
+    keyboard.add(InlineKeyboardButton("Не собран", callback_data=f"status_{item}_не собран"))
+    keyboard.add(InlineKeyboardButton("Отложен", callback_data=f"status_{item}_отложен"))
     
-    bot.edit_message_text(f"Выберите статус для предмета '{obj_name}':", 
+    bot.edit_message_text(f"Выберите статус для предмета '{item}':", 
                           call.message.chat.id, 
                           call.message.message_id, 
                           reply_markup=keyboard)
@@ -173,23 +132,25 @@ def edit_item(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('status_'))
 def set_status(call):
     user_id = call.from_user.id
-    _, obj_id, status = call.data.split('_')
-    obj_id = int(obj_id)
+    _, item, status = call.data.split('_')
     
-    cursor.execute("INSERT OR REPLACE INTO user_responses (user_id, object_id, status) VALUES (?, ?, ?)",
-                   (user_id, obj_id, status))
-    conn.commit()
+    user_responses.setdefault(user_id, {})[item] = status
     
     bot.answer_callback_query(call.id, f"Статус обновлен: {status}")
-    edit_list(call.message)
-
-@bot.message_handler(func=lambda message: message.text == 'Посмотреть весь список')
-def show_full_list(message):
-    cursor.execute("SELECT name FROM objects ORDER BY id")
-    objects = cursor.fetchall()
-    object_list = "\n".join([f"- {obj[0]}" for obj in objects])
-    bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
-    bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
+    
+    # Обновляем сообщение со списком после изменения статуса
+    items = read_items()
+    responses = user_responses.get(user_id, {})
+    
+    keyboard = InlineKeyboardMarkup()
+    for item in items:
+        current_status = responses.get(item, 'Не задано')
+        keyboard.add(InlineKeyboardButton(f"{item} - {current_status}", callback_data=f"edit_{item}"))
+    
+    bot.edit_message_text("Выберите предмет для редактирования:", 
+                          call.message.chat.id, 
+                          call.message.message_id, 
+                          reply_markup=keyboard)
 
 @bot.message_handler(func=lambda message: message.text == 'Собраться заново')
 def restart_packing(message):
@@ -212,4 +173,10 @@ def set_commands():
 
 if __name__ == '__main__':
     set_commands()
-    bot.polling(none_stop=True)
+    logging.info("Bot started")
+    while True:
+        try:
+            bot.polling(none_stop=True)
+        except Exception as e:
+            logging.error(f"Bot crashed. Restarting. Error: {e}")
+            time.sleep(5)
