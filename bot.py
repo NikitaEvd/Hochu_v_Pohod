@@ -133,7 +133,9 @@ def edit_list(message):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
-        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=f"edit_{item}"))
+        # Ограничиваем длину callback_data до 64 байт
+        callback_data = f"edit_{item[:50]}"  # Обрезаем item до 50 символов
+        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
     
     logger.info(f"Sending edit list message to user {user_id}")
     bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
@@ -144,12 +146,16 @@ def edit_item(call):
     user_id = call.from_user.id
     item = call.data.split('_', 1)[1]
     
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{item}_да"))
-    keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{item}_нет"))
-    keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{item}_отложить"))
+    # Находим полное имя item из списка items
+    items = read_items()
+    full_item = next((i for i in items if i.startswith(item)), item)
     
-    bot.edit_message_text(f"Выберите статус для предмета '{item}':", 
+    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{full_item[:45]}_да"))
+    keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{full_item[:45]}_нет"))
+    keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{full_item[:45]}_отложить"))
+    
+    bot.edit_message_text(f"Выберите статус для предмета '{full_item}':", 
                           call.message.chat.id, 
                           call.message.message_id, 
                           reply_markup=keyboard)
@@ -158,20 +164,24 @@ def edit_item(call):
 def set_status(call):
     logger.info(f"Received status callback from user {call.from_user.id}")
     user_id = call.from_user.id
-    _, item, status = call.data.split('_')
+    _, item_prefix, status = call.data.split('_')
     
-    user_responses.setdefault(user_id, {})[item] = status
+    # Находим полное имя item из списка items
+    items = read_items()
+    full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
+    
+    user_responses.setdefault(user_id, {})[full_item] = status
     
     bot.answer_callback_query(call.id, f"Статус обновлен: {status}")
     
     # Обновляем сообщение со списком после изменения статуса
-    items = read_items()
     responses = user_responses.get(user_id, {})
     
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         current_status = responses.get(item, 'Не задано')
-        keyboard.add(InlineKeyboardButton(f"{item} - {current_status}", callback_data=f"edit_{item}"))
+        callback_data = f"edit_{item[:50]}"
+        keyboard.add(InlineKeyboardButton(f"{item} - {current_status}", callback_data=callback_data))
     
     bot.edit_message_text("Выберите предмет для редактирования:", 
                           call.message.chat.id, 
