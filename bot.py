@@ -2,6 +2,7 @@ import os
 import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
 import logging
+import time
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
@@ -104,20 +105,28 @@ def show_lists(chat_id, user_id):
     bot.send_message(chat_id, result)
 
 @bot.message_handler(func=lambda message: message.text == 'Редактировать список')
+def handle_edit_list(message):
+    logging.info("Handling 'Редактировать список' command")
+    edit_list(message)
+
 def edit_list(message):
+    logging.info("Entered edit_list function")
     user_id = message.from_user.id
     items = read_items()
     responses = user_responses.get(user_id, {})
     
     if not responses:
+        logging.info("No saved responses for user")
         bot.send_message(message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
         return
     
+    logging.info("Creating keyboard for item editing")
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
         keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=f"edit_{item}"))
     
+    logging.info("Sending edit list message")
     bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('edit_'))
@@ -158,15 +167,6 @@ def set_status(call):
                           call.message.message_id, 
                           reply_markup=keyboard)
 
-# Добавим логирование для отладки
-@bot.message_handler(func=lambda message: True)
-def log_all_messages(message):
-    logging.info(f"Received message: {message.text}")
-    if message.text == 'Редактировать список':
-        edit_list(message)
-    else:
-        bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
-
 @bot.message_handler(func=lambda message: message.text == 'Собраться заново')
 def restart_packing(message):
     user_id = message.from_user.id
@@ -182,7 +182,8 @@ def show_full_list_after_packing(message):
     bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
 
 @bot.message_handler(func=lambda message: True)
-def unknown_command(message):
+def log_all_messages(message):
+    logging.info(f"Received message: {message.text}")
     bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
 
 def set_commands():
