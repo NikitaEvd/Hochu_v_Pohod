@@ -20,17 +20,17 @@ user_progress = {}
 user_responses = {}
 
 def get_start_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton('Собраться в поход'), KeyboardButton('Посмотреть список'))
     return keyboard
 
 def get_pack_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton('Да'), KeyboardButton('Нет'), KeyboardButton('Отложить'))
     return keyboard
 
 def get_final_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton('Редактировать список'), KeyboardButton('Посмотреть весь список'))
     keyboard.add(KeyboardButton('Собраться заново'))
     return keyboard
@@ -39,7 +39,7 @@ def reset_progress(user_id):
     user_progress[user_id] = 0
     user_responses[user_id] = {}
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'reset'])
 def start(message):
     user_id = message.from_user.id
     reset_progress(user_id)
@@ -47,17 +47,12 @@ def start(message):
                        "Готовы ли вы начать собираться в поход или хотите посмотреть список вещей?")
     bot.send_message(message.chat.id, welcome_message, reply_markup=get_start_keyboard())
 
-@bot.message_handler(func=lambda message: message.text == 'Посмотреть весь список')
-def show_full_list_after_packing(message):
-    items = read_items()
-    object_list = "\n".join([f"- {item}" for item in items])
-    bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
-    bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
-
-# Добавим обработчик для неизвестных команд
-@bot.message_handler(func=lambda message: True)
-def unknown_command(message):
-    bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
+@bot.message_handler(func=lambda message: message.text == 'Собраться в поход')
+def pack(message):
+    user_id = message.from_user.id
+    reset_progress(user_id)
+    bot.send_message(message.chat.id, "Отлично! Давайте проверим, что вы собрали в поход. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
+    ask_object(message.chat.id, user_id)
 
 @bot.message_handler(func=lambda message: message.text == 'Посмотреть список')
 def show_full_list(message):
@@ -170,11 +165,16 @@ def restart_packing(message):
     bot.send_message(message.chat.id, "Давайте начнем сбор заново. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
     ask_object(message.chat.id, user_id)
 
-@bot.message_handler(commands=['reset'])
-def reset(message):
-    user_id = message.from_user.id
-    reset_progress(user_id)
-    bot.send_message(message.chat.id, "Ваш прогресс сброшен. Хотите начать собираться заново или посмотреть список вещей?", reply_markup=get_start_keyboard())
+@bot.message_handler(func=lambda message: message.text == 'Посмотреть весь список')
+def show_full_list_after_packing(message):
+    items = read_items()
+    object_list = "\n".join([f"- {item}" for item in items])
+    bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
+    bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
+
+@bot.message_handler(func=lambda message: True)
+def unknown_command(message):
+    bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
 
 def set_commands():
     bot.set_my_commands([
