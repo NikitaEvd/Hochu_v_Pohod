@@ -77,10 +77,12 @@ def handle_response(message):
     items = read_items()
     current_object = user_progress.get(user_id, 0)
     
-    user_responses.setdefault(user_id, {})[items[current_object]] = response
-    user_progress[user_id] = current_object + 1
-    
-    ask_object(message.chat.id, user_id)
+    if current_object < len(items):
+        user_responses.setdefault(user_id, {})[items[current_object]] = response
+        user_progress[user_id] = current_object + 1
+        ask_object(message.chat.id, user_id)
+    else:
+        finish_packing(message.chat.id, user_id)
 
 def finish_packing(chat_id, user_id):
     bot.send_message(chat_id, "Вы закончили сбор вещей. Вот ваши списки:")
@@ -90,9 +92,9 @@ def finish_packing(chat_id, user_id):
 def show_lists(chat_id, user_id):
     responses = user_responses.get(user_id, {})
     
-    packed = [item for item, status in responses.items() if status == 'собран']
-    not_packed = [item for item, status in responses.items() if status == 'не собран']
-    postponed = [item for item, status in responses.items() if status == 'отложен']
+    packed = [item for item, status in responses.items() if status == 'да']
+    not_packed = [item for item, status in responses.items() if status == 'нет']
+    postponed = [item for item, status in responses.items() if status == 'отложить']
     
     result = "Ваши списки:\n\n"
     result += "Собрано:\n" + "\n".join(f"- {item}" for item in packed) + "\n\n"
@@ -120,9 +122,9 @@ def edit_item(call):
     item = call.data.split('_', 1)[1]
     
     keyboard = InlineKeyboardMarkup()
-    keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{item}_собран"))
-    keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{item}_не собран"))
-    keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{item}_отложен"))
+    keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{item}_да"))
+    keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{item}_нет"))
+    keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{item}_отложить"))
     
     bot.edit_message_text(f"Выберите статус для предмета '{item}':", 
                           call.message.chat.id, 
