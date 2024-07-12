@@ -5,7 +5,8 @@ import logging
 import time
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Получение токена из переменной окружения
 TOKEN = os.environ.get('BOT_TOKEN')
@@ -42,6 +43,7 @@ def reset_progress(user_id):
 
 @bot.message_handler(commands=['start', 'reset'])
 def start(message):
+    logger.info(f"Received start/reset command from user {message.from_user.id}")
     user_id = message.from_user.id
     reset_progress(user_id)
     welcome_message = ("Привет! Я бот, который помогает собираться в поход. "
@@ -50,6 +52,7 @@ def start(message):
 
 @bot.message_handler(func=lambda message: message.text == 'Собраться в поход')
 def pack(message):
+    logger.info(f"User {message.from_user.id} started packing")
     user_id = message.from_user.id
     reset_progress(user_id)
     bot.send_message(message.chat.id, "Отлично! Давайте проверим, что вы собрали в поход. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
@@ -57,6 +60,7 @@ def pack(message):
 
 @bot.message_handler(func=lambda message: message.text == 'Посмотреть список')
 def show_full_list(message):
+    logger.info(f"User {message.from_user.id} requested full list")
     items = read_items()
     object_list = "\n".join([f"- {item}" for item in items])
     bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}\n\nГотовы собираться?", reply_markup=get_start_keyboard())
@@ -66,6 +70,7 @@ def ask_object(chat_id, user_id):
     current_object = user_progress.get(user_id, 0)
     
     if current_object < len(items):
+        logger.info(f"Asking user {user_id} about item: {items[current_object]}")
         bot.send_message(chat_id, f"{items[current_object]}?", reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
@@ -79,6 +84,7 @@ def handle_response(message):
     current_object = user_progress.get(user_id, 0)
     
     if current_object < len(items):
+        logger.info(f"User {user_id} responded {response} to item {items[current_object]}")
         user_responses.setdefault(user_id, {})[items[current_object]] = response
         user_progress[user_id] = current_object + 1
         ask_object(message.chat.id, user_id)
@@ -86,9 +92,12 @@ def handle_response(message):
         finish_packing(message.chat.id, user_id)
 
 def finish_packing(chat_id, user_id):
+    logger.info(f"Finishing packing for user {user_id}")
     bot.send_message(chat_id, "Вы закончили сбор вещей. Вот ваши списки:")
     show_lists(chat_id, user_id)
-    bot.send_message(chat_id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
+    final_keyboard = get_final_keyboard()
+    logger.info(f"Sending final keyboard to user {user_id}: {final_keyboard}")
+    bot.send_message(chat_id, "Что вы хотите сделать дальше?", reply_markup=final_keyboard)
 
 def show_lists(chat_id, user_id):
     responses = user_responses.get(user_id, {})
@@ -106,31 +115,32 @@ def show_lists(chat_id, user_id):
 
 @bot.message_handler(func=lambda message: message.text == 'Редактировать список')
 def handle_edit_list(message):
-    logging.info("Handling 'Редактировать список' command")
+    logger.info(f"Received 'Редактировать список' command from user {message.from_user.id}")
     edit_list(message)
 
 def edit_list(message):
-    logging.info("Entered edit_list function")
+    logger.info(f"Entered edit_list function for user {message.from_user.id}")
     user_id = message.from_user.id
     items = read_items()
     responses = user_responses.get(user_id, {})
     
     if not responses:
-        logging.info("No saved responses for user")
+        logger.info(f"No saved responses for user {user_id}")
         bot.send_message(message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
         return
     
-    logging.info("Creating keyboard for item editing")
+    logger.info(f"Creating keyboard for item editing for user {user_id}")
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
         keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=f"edit_{item}"))
     
-    logging.info("Sending edit list message")
+    logger.info(f"Sending edit list message to user {user_id}")
     bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('edit_'))
 def edit_item(call):
+    logger.info(f"Received edit callback from user {call.from_user.id}")
     user_id = call.from_user.id
     item = call.data.split('_', 1)[1]
     
@@ -146,6 +156,7 @@ def edit_item(call):
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('status_'))
 def set_status(call):
+    logger.info(f"Received status callback from user {call.from_user.id}")
     user_id = call.from_user.id
     _, item, status = call.data.split('_')
     
@@ -169,6 +180,7 @@ def set_status(call):
 
 @bot.message_handler(func=lambda message: message.text == 'Собраться заново')
 def restart_packing(message):
+    logger.info(f"User {message.from_user.id} requested to restart packing")
     user_id = message.from_user.id
     reset_progress(user_id)
     bot.send_message(message.chat.id, "Давайте начнем сбор заново. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
@@ -176,15 +188,20 @@ def restart_packing(message):
 
 @bot.message_handler(func=lambda message: message.text == 'Посмотреть весь список')
 def show_full_list_after_packing(message):
+    logger.info(f"User {message.from_user.id} requested full list after packing")
     items = read_items()
     object_list = "\n".join([f"- {item}" for item in items])
     bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
     bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
 
 @bot.message_handler(func=lambda message: True)
-def log_all_messages(message):
-    logging.info(f"Received message: {message.text}")
-    bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
+def echo_all(message):
+    logger.info(f"Received message: '{message.text}' from user {message.from_user.id}")
+    if message.text == 'Редактировать список':
+        logger.info("Calling handle_edit_list directly")
+        handle_edit_list(message)
+    else:
+        bot.reply_to(message, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
 
 def set_commands():
     bot.set_my_commands([
@@ -194,10 +211,11 @@ def set_commands():
 
 if __name__ == '__main__':
     set_commands()
-    logging.info("Bot started")
+    logger.info("Bot started")
     while True:
         try:
+            logger.info("Starting bot polling")
             bot.polling(none_stop=True)
         except Exception as e:
-            logging.error(f"Bot crashed. Restarting. Error: {e}")
+            logger.error(f"Bot crashed. Restarting. Error: {e}")
             time.sleep(5)
