@@ -47,12 +47,17 @@ def start(message):
                        "Готовы ли вы начать собираться в поход или хотите посмотреть список вещей?")
     bot.send_message(message.chat.id, welcome_message, reply_markup=get_start_keyboard())
 
-@bot.message_handler(func=lambda message: message.text == 'Собраться в поход')
-def pack(message):
-    user_id = message.from_user.id
-    reset_progress(user_id)
-    bot.send_message(message.chat.id, "Отлично! Давайте проверим, что вы собрали в поход. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
-    ask_object(message.chat.id, user_id)
+@bot.message_handler(func=lambda message: message.text == 'Посмотреть весь список')
+def show_full_list_after_packing(message):
+    items = read_items()
+    object_list = "\n".join([f"- {item}" for item in items])
+    bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
+    bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
+
+# Добавим обработчик для неизвестных команд
+@bot.message_handler(func=lambda message: True)
+def unknown_command(message):
+    bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
 
 @bot.message_handler(func=lambda message: message.text == 'Посмотреть список')
 def show_full_list(message):
@@ -109,7 +114,11 @@ def edit_list(message):
     items = read_items()
     responses = user_responses.get(user_id, {})
     
-    keyboard = InlineKeyboardMarkup()
+    if not responses:
+        bot.send_message(message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
+        return
+    
+    keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
         keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=f"edit_{item}"))
@@ -121,7 +130,7 @@ def edit_item(call):
     user_id = call.from_user.id
     item = call.data.split('_', 1)[1]
     
-    keyboard = InlineKeyboardMarkup()
+    keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{item}_да"))
     keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{item}_нет"))
     keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{item}_отложить"))
@@ -144,7 +153,7 @@ def set_status(call):
     items = read_items()
     responses = user_responses.get(user_id, {})
     
-    keyboard = InlineKeyboardMarkup()
+    keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         current_status = responses.get(item, 'Не задано')
         keyboard.add(InlineKeyboardButton(f"{item} - {current_status}", callback_data=f"edit_{item}"))
