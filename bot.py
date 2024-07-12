@@ -158,6 +158,15 @@ def set_status(call):
                           call.message.message_id, 
                           reply_markup=keyboard)
 
+# Добавим логирование для отладки
+@bot.message_handler(func=lambda message: True)
+def log_all_messages(message):
+    logging.info(f"Received message: {message.text}")
+    if message.text == 'Редактировать список':
+        edit_list(message)
+    else:
+        bot.send_message(message.chat.id, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
+
 @bot.message_handler(func=lambda message: message.text == 'Собраться заново')
 def restart_packing(message):
     user_id = message.from_user.id
