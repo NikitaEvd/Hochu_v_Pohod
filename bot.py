@@ -26,7 +26,7 @@ def get_start_keyboard():
 
 def get_pack_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=True)
-    keyboard.add(KeyboardButton('Собран'), KeyboardButton('Не собран'), KeyboardButton('Отложен'))
+    keyboard.add(KeyboardButton('Да'), KeyboardButton('Нет'), KeyboardButton('Отложить'))
     return keyboard
 
 def get_final_keyboard():
@@ -65,11 +65,11 @@ def ask_object(chat_id, user_id):
     current_object = user_progress.get(user_id, 0)
     
     if current_object < len(items):
-        bot.send_message(chat_id, f"Вы собрали {items[current_object]}?", reply_markup=get_pack_keyboard())
+        bot.send_message(chat_id, f"{items[current_object]}?", reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
 
-@bot.message_handler(func=lambda message: message.text in ['Собран', 'Не собран', 'Отложен'])
+@bot.message_handler(func=lambda message: message.text in ['Да', 'Нет', 'Отложить'])
 def handle_response(message):
     user_id = message.from_user.id
     response = message.text.lower()
@@ -120,9 +120,9 @@ def edit_item(call):
     item = call.data.split('_', 1)[1]
     
     keyboard = InlineKeyboardMarkup()
-    keyboard.add(InlineKeyboardButton("Собран", callback_data=f"status_{item}_собран"))
-    keyboard.add(InlineKeyboardButton("Не собран", callback_data=f"status_{item}_не собран"))
-    keyboard.add(InlineKeyboardButton("Отложен", callback_data=f"status_{item}_отложен"))
+    keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{item}_собран"))
+    keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{item}_не собран"))
+    keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{item}_отложен"))
     
     bot.edit_message_text(f"Выберите статус для предмета '{item}':", 
                           call.message.chat.id, 
