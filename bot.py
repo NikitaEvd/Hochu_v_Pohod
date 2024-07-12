@@ -5,7 +5,7 @@ import logging
 import time
 
 # Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Получение токена из переменной окружения
@@ -130,12 +130,10 @@ def edit_list(message):
         return
     
     logger.info(f"Creating keyboard for item editing for user {user_id}")
-    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     for item in items:
         status = responses.get(item, 'Не задано')
-        # Ограничиваем длину callback_data до 64 байт
-        callback_data = f"edit_{item[:50]}"  # Обрезаем item до 50 символов
-        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
+        keyboard.add(KeyboardButton(f"{item} - {status}"))
     
     logger.info(f"Sending edit list message to user {user_id}")
     bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
