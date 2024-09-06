@@ -113,7 +113,10 @@ def show_lists(chat_id, user_id):
 @bot.callback_query_handler(func=lambda call: call.data == "edit_list")
 def handle_edit_list(call):
     logger.info(f"Received 'Редактировать список' callback from user {call.from_user.id}")
-    edit_list(call.message)
+    if user_responses.get(call.from_user.id):
+        edit_list(call.message)
+    else:
+        bot.send_message(call.message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
 
 def edit_list(message):
     logger.info(f"Entered edit_list function for user {message.chat.id}")
