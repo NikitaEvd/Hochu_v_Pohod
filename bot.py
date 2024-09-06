@@ -28,9 +28,10 @@ def get_pack_keyboard():
     return keyboard
 
 def get_final_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-    keyboard.add(KeyboardButton('Редактировать список'), KeyboardButton('Посмотреть весь список'))
-    keyboard.add(KeyboardButton('Собраться заново'))
+    keyboard = InlineKeyboardMarkup()
+    keyboard.row(InlineKeyboardButton("Редактировать список", callback_data="edit_list"))
+    keyboard.row(InlineKeyboardButton("Посмотреть весь список", callback_data="show_full_list"))
+    keyboard.row(InlineKeyboardButton("Собраться заново", callback_data="restart_packing"))
     return keyboard
 
 def reset_progress(user_id):
@@ -109,14 +110,14 @@ def show_lists(chat_id, user_id):
     
     bot.send_message(chat_id, result)
 
-@bot.message_handler(func=lambda message: message.text == 'Редактировать список')
-def handle_edit_list(message):
-    logger.info(f"Received 'Редактировать список' command from user {message.from_user.id}")
-    edit_list(message)
+@bot.callback_query_handler(func=lambda call: call.data == "edit_list")
+def handle_edit_list(call):
+    logger.info(f"Received 'Редактировать список' callback from user {call.from_user.id}")
+    edit_list(call.message)
 
 def edit_list(message):
-    logger.info(f"Entered edit_list function for user {message.from_user.id}")
-    user_id = message.from_user.id
+    logger.info(f"Entered edit_list function for user {message.chat.id}")
+    user_id = message.chat.id
     items = read_items()
     responses = user_responses.get(user_id, {})
     
@@ -195,24 +196,30 @@ def edit_list_callback(call):
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_final")
 def back_to_final(call):
     logger.info(f"Returning to final menu for user {call.from_user.id}")
-    bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.send_message(call.message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
+    bot.edit_message_text("Что вы хотите сделать дальше?", 
+                          call.message.chat.id, 
+                          call.message.message_id, 
+                          reply_markup=get_final_keyboard())
 
-@bot.message_handler(func=lambda message: message.text == 'Собраться заново')
-def restart_packing(message):
-    logger.info(f"User {message.from_user.id} requested to restart packing")
-    user_id = message.from_user.id
+@bot.callback_query_handler(func=lambda call: call.data == "restart_packing")
+def restart_packing(call):
+    logger.info(f"User {call.from_user.id} requested to restart packing")
+    user_id = call.from_user.id
     reset_progress(user_id)
-    bot.send_message(message.chat.id, "Давайте начнем сбор заново. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
-    ask_object(message.chat.id, user_id)
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    bot.send_message(call.message.chat.id, "Давайте начнем сбор заново. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
+    ask_object(call.message.chat.id, user_id)
 
-@bot.message_handler(func=lambda message: message.text == 'Посмотреть весь список')
-def show_full_list_after_packing(message):
-    logger.info(f"User {message.from_user.id} requested full list after packing")
+@bot.callback_query_handler(func=lambda call: call.data == "show_full_list")
+def show_full_list_after_packing(call):
+    logger.info(f"User {call.from_user.id} requested full list after packing")
     items = read_items()
     object_list = "\n".join([f"- {item}" for item in items])
-    bot.send_message(message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
-    bot.send_message(message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
+    bot.send_message(call.message.chat.id, f"Вот полный список вещей для похода:\n\n{object_list}")
+    bot.edit_message_text("Что вы хотите сделать дальше?", 
+                          call.message.chat.id, 
+                          call.message.message_id, 
+                          reply_markup=get_final_keyboard())
 
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
