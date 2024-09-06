@@ -1,6 +1,6 @@
 import os
 import telebot
-from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 import logging
 import time
 
@@ -90,7 +90,7 @@ def handle_response(message):
 
 def finish_packing(chat_id, user_id):
     logger.info(f"Finishing packing for user {user_id}")
-    bot.send_message(chat_id, "Вы закончили сбор вещей. Вот ваши списки:")
+    bot.send_message(chat_id, "Вы закончили сбор вещей. Вот ваши списки:", reply_markup=ReplyKeyboardRemove())
     show_lists(chat_id, user_id)
     final_keyboard = get_final_keyboard()
     logger.info(f"Sending final keyboard to user {user_id}: {final_keyboard}")
@@ -136,7 +136,10 @@ def edit_list(message):
     keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
     
     logger.info(f"Sending edit list message to user {user_id}")
-    bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
+    bot.edit_message_text("Выберите предмет для редактирования:", 
+                          message.chat.id, 
+                          message.message_id, 
+                          reply_markup=keyboard)
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('edit_'))
 def edit_item(call):
