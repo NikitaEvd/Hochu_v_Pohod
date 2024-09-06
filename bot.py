@@ -130,10 +130,13 @@ def edit_list(message):
         return
     
     logger.info(f"Creating keyboard for item editing for user {user_id}")
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
-        keyboard.add(KeyboardButton(f"{item} - {status}"))
+        callback_data = f"edit_{item[:45]}"  # Ограничиваем длину callback_data
+        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
+    
+    keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
     
     logger.info(f"Sending edit list message to user {user_id}")
     bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
@@ -142,16 +145,17 @@ def edit_list(message):
 def edit_item(call):
     logger.info(f"Received edit callback from user {call.from_user.id}")
     user_id = call.from_user.id
-    item = call.data.split('_', 1)[1]
+    item_prefix = call.data.split('_', 1)[1]
     
     # Находим полное имя item из списка items
     items = read_items()
-    full_item = next((i for i in items if i.startswith(item)), item)
+    full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
     
     keyboard = InlineKeyboardMarkup(row_width=1)
     keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{full_item[:45]}_да"))
     keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{full_item[:45]}_нет"))
     keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{full_item[:45]}_отложить"))
+    keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_edit"))
     
     bot.edit_message_text(f"Выберите статус для предмета '{full_item}':", 
                           call.message.chat.id, 
@@ -172,19 +176,34 @@ def set_status(call):
     
     bot.answer_callback_query(call.id, f"Статус обновлен: {status}")
     
-    # Обновляем сообщение со списком после изменения статуса
+    # Возвращаемся к списку редактирования
+    edit_list_callback(call)
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_edit")
+def edit_list_callback(call):
+    logger.info(f"Returning to edit list for user {call.from_user.id}")
+    user_id = call.from_user.id
+    items = read_items()
     responses = user_responses.get(user_id, {})
     
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
-        current_status = responses.get(item, 'Не задано')
-        callback_data = f"edit_{item[:50]}"
-        keyboard.add(InlineKeyboardButton(f"{item} - {current_status}", callback_data=callback_data))
+        status = responses.get(item, 'Не задано')
+        callback_data = f"edit_{item[:45]}"  # Ограничиваем длину callback_data
+        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
+    
+    keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
     
     bot.edit_message_text("Выберите предмет для редактирования:", 
                           call.message.chat.id, 
                           call.message.message_id, 
                           reply_markup=keyboard)
+
+@bot.callback_query_handler(func=lambda call: call.data == "back_to_final")
+def back_to_final(call):
+    logger.info(f"Returning to final menu for user {call.from_user.id}")
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+    bot.send_message(call.message.chat.id, "Что вы хотите сделать дальше?", reply_markup=get_final_keyboard())
 
 @bot.message_handler(func=lambda message: message.text == 'Собраться заново')
 def restart_packing(message):
@@ -205,11 +224,7 @@ def show_full_list_after_packing(message):
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
     logger.info(f"Received message: '{message.text}' from user {message.from_user.id}")
-    if message.text == 'Редактировать список':
-        logger.info("Calling handle_edit_list directly")
-        handle_edit_list(message)
-    else:
-        bot.reply_to(message, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
+    bot.reply_to(message, "Извините, я не понимаю эту команду. Пожалуйста, используйте кнопки или команды /start и /reset.")
 
 def set_commands():
     bot.set_my_commands([
