@@ -4,20 +4,16 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, Inlin
 import logging
 import time
 
-# Настройка логирования
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Получение токена из переменной окружения
 TOKEN = os.environ.get('BOT_TOKEN')
 bot = telebot.TeleBot(TOKEN)
 
-# Функция для чтения списка предметов из файла
 def read_items():
     with open('hiking_items.txt', 'r', encoding='utf-8') as file:
         return [line.strip() for line in file if line.strip()]
 
-# Глобальные переменные для хранения данных пользователей
 user_progress = {}
 user_responses = {}
 
@@ -133,7 +129,7 @@ def edit_list(message):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
-        callback_data = f"edit_{item[:45]}"  # Ограничиваем длину callback_data
+        callback_data = f"edit_{item[:45]}"
         keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
     
     keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
@@ -147,7 +143,6 @@ def edit_item(call):
     user_id = call.from_user.id
     item_prefix = call.data.split('_', 1)[1]
     
-    # Находим полное имя item из списка items
     items = read_items()
     full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
     
@@ -168,7 +163,6 @@ def set_status(call):
     user_id = call.from_user.id
     _, item_prefix, status = call.data.split('_')
     
-    # Находим полное имя item из списка items
     items = read_items()
     full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
     
@@ -176,7 +170,6 @@ def set_status(call):
     
     bot.answer_callback_query(call.id, f"Статус обновлен: {status}")
     
-    # Возвращаемся к списку редактирования
     edit_list_callback(call)
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_edit")
@@ -189,7 +182,7 @@ def edit_list_callback(call):
     keyboard = InlineKeyboardMarkup(row_width=1)
     for item in items:
         status = responses.get(item, 'Не задано')
-        callback_data = f"edit_{item[:45]}"  # Ограничиваем длину callback_data
+        callback_data = f"edit_{item[:45]}"
         keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
     
     keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
