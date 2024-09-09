@@ -24,7 +24,7 @@ def get_start_keyboard():
 
 def get_pack_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-    keyboard.add(KeyboardButton('Да'), KeyboardButton('Нет'), KeyboardButton('Отложить'))
+    keyboard.add(KeyboardButton('Беру'), KeyboardButton('Возьму позже'), KeyboardButton('В этот поход не буду брать'))
     return keyboard
 
 def get_final_keyboard():
@@ -43,8 +43,8 @@ def start(message):
     logger.info(f"Received start/reset command from user {message.from_user.id}")
     user_id = message.from_user.id
     reset_progress(user_id)
-    welcome_message = ("Привет! Я бот, который помогает собираться в поход. "
-                       "Готовы ли вы начать собираться в поход или хотите посмотреть список вещей?")
+    welcome_message = ("Привет! Я бот, который помогает собраться в поход. "
+                       "Начнем собираться или вы хотите проверить список вещей?")
     bot.send_message(message.chat.id, welcome_message, reply_markup=get_start_keyboard())
 
 @bot.message_handler(func=lambda message: message.text == 'Собраться в поход')
@@ -52,7 +52,7 @@ def pack(message):
     logger.info(f"User {message.from_user.id} started packing")
     user_id = message.from_user.id
     reset_progress(user_id)
-    bot.send_message(message.chat.id, "Отлично! Давайте проверим, что вы собрали в поход. Я буду задавать вопросы о каждом предмете.", reply_markup=get_pack_keyboard())
+    bot.send_message(message.chat.id, "Отлично, тогда начнем! Не забудьте:", reply_markup=get_pack_keyboard())
     ask_object(message.chat.id, user_id)
 
 @bot.message_handler(func=lambda message: message.text == 'Посмотреть список')
@@ -72,7 +72,7 @@ def ask_object(chat_id, user_id):
     else:
         finish_packing(chat_id, user_id)
 
-@bot.message_handler(func=lambda message: message.text in ['Да', 'Нет', 'Отложить'])
+@bot.message_handler(func=lambda message: message.text in ['Беру', 'Возьму позже', 'В этот поход не буду брать'])
 def handle_response(message):
     user_id = message.from_user.id
     response = message.text.lower()
@@ -90,23 +90,23 @@ def handle_response(message):
 
 def finish_packing(chat_id, user_id):
     logger.info(f"Finishing packing for user {user_id}")
-    bot.send_message(chat_id, "Вы закончили сбор вещей. Вот ваши списки:", reply_markup=ReplyKeyboardRemove())
+    bot.send_message(chat_id, "Ура, список закончился.", reply_markup=ReplyKeyboardRemove())
     show_lists(chat_id, user_id)
     final_keyboard = get_final_keyboard()
     logger.info(f"Sending final keyboard to user {user_id}: {final_keyboard}")
-    bot.send_message(chat_id, "Что вы хотите сделать дальше?", reply_markup=final_keyboard)
+    bot.send_message(chat_id, "Что дальше?", reply_markup=final_keyboard)
 
 def show_lists(chat_id, user_id):
     responses = user_responses.get(user_id, {})
     
-    packed = [item for item, status in responses.items() if status == 'да']
-    not_packed = [item for item, status in responses.items() if status == 'нет']
-    postponed = [item for item, status in responses.items() if status == 'отложить']
+    packed = [item for item, status in responses.items() if status == 'Беру']
+    not_packed = [item for item, status in responses.items() if status == 'Возьму позже']
+    postponed = [item for item, status in responses.items() if status == 'В этот поход не буду брать']
     
-    result = "Ваши списки:\n\n"
-    result += "Собрано:\n" + "\n".join(f"- {item}" for item in packed) + "\n\n"
-    result += "Не собрано:\n" + "\n".join(f"- {item}" for item in not_packed) + "\n\n"
-    result += "Отложено:\n" + "\n".join(f"- {item}" for item in postponed)
+    result = "Вот, что получилось:\n\n"
+    result += "Уже в рюкзаке:\n" + "\n".join(f"- {item}" for item in packed) + "\n\n"
+    result += "Не забыть положить позже:\n" + "\n".join(f"- {item}" for item in not_packed) + "\n\n"
+    result += "Не будете брать в этот поход:\n" + "\n".join(f"- {item}" for item in postponed)
     
     bot.send_message(chat_id, result)
 
