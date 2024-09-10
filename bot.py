@@ -5,6 +5,7 @@ import logging
 import time
 import traceback
 import hashlib
+import re
 from messages import *
 
 # Расширенное логирование
@@ -84,7 +85,19 @@ def ask_object(chat_id, user_id):
 
     if current_object < len(items):
         logger.debug(f"Asking user {user_id} about item: {items[current_object]}")
-        bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), reply_markup=get_pack_keyboard())
+        
+        # Форматируем текст в скобках курсивом
+        formatted_item = re.sub(r'\((.*?)\)', r'(_\1_)', items[current_object])
+        
+        # Экранируем специальные символы Markdown
+        formatted_item = formatted_item.replace("*", "\*").replace("_", "\_").replace("`", "\`")
+        
+        # Снова применяем форматирование курсивом, но уже с экранированными символами
+        formatted_item = re.sub(r'\\\((.*?)\\\)', r'(_\1_)', formatted_item)
+        
+        bot.send_message(chat_id, ITEM_PROMPT.format(formatted_item), 
+                         reply_markup=get_pack_keyboard(), 
+                         parse_mode='MarkdownV2')
     else:
         finish_packing(chat_id, user_id)
 
