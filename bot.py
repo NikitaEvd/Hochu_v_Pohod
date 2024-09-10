@@ -84,7 +84,13 @@ def ask_object(chat_id, user_id):
 
     if current_object < len(items):
         logger.debug(f"Asking user {user_id} about item: {items[current_object]}")
-        bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), reply_markup=get_pack_keyboard())
+        
+        # Форматируем текст в скобках курсивом
+        formatted_item = re.sub(r'\((.*?)\)', r'(_\1_)', items[current_object])
+        
+        bot.send_message(chat_id, ITEM_PROMPT.format(formatted_item), 
+                         reply_markup=get_pack_keyboard(), 
+                         parse_mode='Markdown')
     else:
         finish_packing(chat_id, user_id)
 
@@ -119,11 +125,19 @@ def show_lists(chat_id, user_id):
     not_packed = [item for item, status in responses.items() if status.lower() == BUTTON_TAKE_LATER.lower()]
     postponed = [item for item, status in responses.items() if status.lower() == BUTTON_SKIP.lower()]
 
-    result = PACKING_RESULT.format(
-        "\n".join(f"- {item}" for item in packed),
-        "\n".join(f"- {item}" for item in not_packed),
-        "\n".join(f"- {item}" for item in postponed)
-    )
+    result = "Вот, что получилось:\n\n"
+    
+    if packed:
+        result += "Уже в рюкзаке:\n" + "\n".join(f"- {item}" for item in packed) + "\n\n"
+    
+    if not_packed:
+        result += "Не забыть положить позже:\n" + "\n".join(f"- {item}" for item in not_packed) + "\n\n"
+    
+    if postponed:
+        result += "Не будете брать в этот поход:\n" + "\n".join(f"- {item}" for item in postponed)
+
+    # Удаляем лишние пустые строки в конце
+    result = result.rstrip()
 
     bot.send_message(chat_id, result)
 
