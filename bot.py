@@ -165,10 +165,18 @@ def edit_list(message):
         keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
 
         logger.debug(f"Sending edit list message to user {user_id}")
-        bot.edit_message_text("Выберите предмет для редактирования:", 
-                              message.chat.id, 
-                              message.message_id, 
-                              reply_markup=keyboard)
+        try:
+            bot.edit_message_text("Выберите предмет для редактирования:", 
+                                  message.chat.id, 
+                                  message.message_id, 
+                                  reply_markup=keyboard)
+        except telebot.apihelper.ApiTelegramException as api_error:
+            logger.error(f"Telegram API error: {str(api_error)}")
+            if "message is not modified" in str(api_error).lower():
+                logger.info("Message content is the same, sending new message instead of editing")
+                bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
+            else:
+                raise  # Re-raise the exception if it's not the "message is not modified" error
     except Exception as e:
         logger.error(f"Error in edit_list for user {message.chat.id}: {str(e)}")
         logger.error(traceback.format_exc())
