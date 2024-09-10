@@ -249,9 +249,7 @@ def set_status(call):
 
         bot.answer_callback_query(call.id, STATUS_UPDATED.format(chosen_status))
 
-        # Показываем обновленные списки после изменения статуса
-        show_lists(call.message.chat.id, user_id)
-
+        # Обновляем сообщение с текущим статусом редактирования
         edit_list(call.message)
     except Exception as e:
         logger.error(f"Error in set_status for user {call.from_user.id}: {str(e)}")
@@ -287,7 +285,7 @@ def back_to_final(call):
     # Показываем обновленные списки
     show_lists(call.message.chat.id, user_id)
     
-    # Отправляем сообщение с финальным меню
+    # Отправляем сообщение с финальным меню и клавиатурой
     bot.send_message(call.message.chat.id, WHAT_NEXT_MESSAGE, reply_markup=get_final_keyboard())
     
     # Удаляем предыдущее сообщение с кнопками редактирования
