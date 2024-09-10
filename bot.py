@@ -85,26 +85,8 @@ def ask_object(chat_id, user_id):
 
     if current_object < len(items):
         logger.debug(f"Asking user {user_id} about item: {items[current_object]}")
-        
-        # Заменяем скобки на двойные нижние подчеркивания для курсива
-        formatted_item = re.sub(r'\((.*?)\)', r'__\1__', items[current_object])
-        
-        # Экранируем специальные символы Markdown
-        markdown_special_chars = '_*[]()~`>#+-=|{}.!'
-        for char in markdown_special_chars:
-            formatted_item = formatted_item.replace(char, f'\\{char}')
-        
-        # Возвращаем двойные нижние подчеркивания для курсива
-        formatted_item = formatted_item.replace('\\_\\_', '__')
-        
-        try:
-            bot.send_message(chat_id, ITEM_PROMPT.format(formatted_item), 
-                             reply_markup=get_pack_keyboard(), 
-                             parse_mode='MarkdownV2')
-        except telebot.apihelper.ApiException as e:
-            logger.error(f"Failed to send message with Markdown. Sending without formatting. Error: {e}")
-            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
-                             reply_markup=get_pack_keyboard())
+        bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
+                         reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
 
