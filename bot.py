@@ -141,7 +141,11 @@ def show_lists(chat_id, user_id):
     # Удаляем лишние пустые строки в конце
     result = result.rstrip()
 
-    bot.send_message(chat_id, result)
+    try:
+        bot.send_message(chat_id, result, parse_mode='Markdown')
+    except telebot.apihelper.ApiException as e:
+        logger.error(f"Failed to send message with Markdown. Sending without formatting. Error: {e}")
+        bot.send_message(chat_id, result)
 
 @bot.callback_query_handler(func=lambda call: call.data == "edit_list")
 def handle_edit_list(call):
@@ -182,7 +186,7 @@ def edit_list(message):
         for item in items:
             status = responses.get(item, 'Не задано')
             callback_data = generate_short_callback("edit", item)
-            keyboard.add(InlineKeyboardButton(ITEM_STATUS_FORMAT.format(item, status), callback_data=callback_data))
+            keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
 
         keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
 
@@ -191,12 +195,13 @@ def edit_list(message):
             bot.edit_message_text(CHOOSE_ITEM_TO_EDIT, 
                                   message.chat.id, 
                                   message.message_id, 
-                                  reply_markup=keyboard)
+                                  reply_markup=keyboard,
+                                  parse_mode='Markdown')
         except telebot.apihelper.ApiTelegramException as api_error:
             logger.error(f"Telegram API error: {str(api_error)}")
             if "message is not modified" in str(api_error).lower():
                 logger.info("Message content is the same, sending new message instead of editing")
-                bot.send_message(message.chat.id, CHOOSE_ITEM_TO_EDIT, reply_markup=keyboard)
+                bot.send_message(message.chat.id, CHOOSE_ITEM_TO_EDIT, reply_markup=keyboard, parse_mode='Markdown')
             else:
                 raise
     except Exception as e:
@@ -229,7 +234,8 @@ def edit_item(call):
         bot.edit_message_text(CHOOSE_ITEM_STATUS.format(full_item), 
                               call.message.chat.id, 
                               call.message.message_id, 
-                              reply_markup=keyboard)
+                              reply_markup=keyboard,
+                              parse_mode='Markdown')
     except Exception as e:
         logger.error(f"Error in edit_item for user {call.from_user.id}: {str(e)}")
         logger.error(traceback.format_exc())
