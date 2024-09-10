@@ -85,8 +85,14 @@ def ask_object(chat_id, user_id):
 
     if current_object < len(items):
         logger.debug(f"Asking user {user_id} about item: {items[current_object]}")
-        bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
-                         reply_markup=get_pack_keyboard())
+        try:
+            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
+                             reply_markup=get_pack_keyboard(),
+                             parse_mode='Markdown')
+        except telebot.apihelper.ApiException as e:
+            logger.error(f"Failed to send message with Markdown. Sending without formatting. Error: {e}")
+            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
+                             reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
 
