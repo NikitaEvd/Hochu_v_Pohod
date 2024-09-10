@@ -186,8 +186,9 @@ def edit_list(message):
         for item in items:
             status = responses.get(item, 'Не задано')
             callback_data = generate_short_callback("edit", item)
-            # Используем HTML-разметку вместо Markdown для текста кнопки
-            button_text = f"{item} - <i>{status}</i>"
+            # Удаляем Markdown разметку из item
+            clean_item = re.sub(r'[*_`\[\]]', '', item)
+            button_text = f"{clean_item} - {status}"
             keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
         keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
@@ -197,13 +198,12 @@ def edit_list(message):
             bot.edit_message_text(CHOOSE_ITEM_TO_EDIT, 
                                   message.chat.id, 
                                   message.message_id, 
-                                  reply_markup=keyboard,
-                                  parse_mode='HTML')
+                                  reply_markup=keyboard)
         except telebot.apihelper.ApiTelegramException as api_error:
             logger.error(f"Telegram API error: {str(api_error)}")
             if "message is not modified" in str(api_error).lower():
                 logger.info("Message content is the same, sending new message instead of editing")
-                bot.send_message(message.chat.id, CHOOSE_ITEM_TO_EDIT, reply_markup=keyboard, parse_mode='HTML')
+                bot.send_message(message.chat.id, CHOOSE_ITEM_TO_EDIT, reply_markup=keyboard)
             else:
                 raise
     except Exception as e:
@@ -292,7 +292,10 @@ def edit_list_callback(call):
     for item in items:
         status = responses.get(item, 'Не задано')
         callback_data = generate_short_callback("edit", item)
-        keyboard.add(InlineKeyboardButton(ITEM_STATUS_FORMAT.format(item, status), callback_data=callback_data))
+        # Удаляем Markdown разметку из item
+        clean_item = re.sub(r'[*_`\[\]]', '', item)
+        button_text = f"{clean_item} - {status}"
+        keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
     keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
 
