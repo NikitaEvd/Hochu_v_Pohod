@@ -4,6 +4,7 @@ from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, Inlin
 import logging
 import time
 import traceback
+import hashlib
 
 # Расширенное логирование
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -143,6 +144,11 @@ def handle_edit_list(call):
         bot.answer_callback_query(call.id, "Произошла ошибка при обработке запроса.")
         bot.send_message(call.message.chat.id, "Извините, произошла ошибка при обработке вашего запроса.")
 
+def generate_short_callback(prefix, data):
+    """Generate a short callback data using a hash function."""
+    hash_object = hashlib.md5(data.encode())
+    return f"{prefix}_{hash_object.hexdigest()[:10]}"
+
 def edit_list(message):
     logger.debug(f"Entered edit_list function for user {message.chat.id}")
     try:
@@ -159,7 +165,7 @@ def edit_list(message):
         keyboard = InlineKeyboardMarkup(row_width=1)
         for item in items:
             status = responses.get(item, 'Не задано')
-            callback_data = f"edit_{item[:45]}"
+            callback_data = generate_short_callback("edit", item)
             keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
 
         keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
@@ -176,7 +182,7 @@ def edit_list(message):
                 logger.info("Message content is the same, sending new message instead of editing")
                 bot.send_message(message.chat.id, "Выберите предмет для редактирования:", reply_markup=keyboard)
             else:
-                raise  # Re-raise the exception if it's not the "message is not modified" error
+                raise
     except Exception as e:
         logger.error(f"Error in edit_list for user {message.chat.id}: {str(e)}")
         logger.error(traceback.format_exc())
@@ -187,15 +193,21 @@ def edit_item(call):
     logger.info(f"Received edit callback from user {call.from_user.id}")
     try:
         user_id = call.from_user.id
-        item_prefix = call.data.split('_', 1)[1]
+        item_hash = call.data.split('_', 1)[1]
 
         items = read_items()
-        full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
+        full_item = next((item for item in items if generate_short_callback("edit", item).split('_')[1] == item_hash), None)
+
+        if full_item is None:
+            logger.error(f"Item not found for hash {item_hash}")
+            bot.answer_callback_query(call.id, "Извините, произошла ошибка при поиске предмета.")
+            return
 
         keyboard = InlineKeyboardMarkup(row_width=1)
-        keyboard.add(InlineKeyboardButton("Беру", callback_data=f"status_{full_item[:45]}_беру"))
-        keyboard.add(InlineKeyboardButton("Возьму позже", callback_data=f"status_{full_item[:45]}_возьму позже"))
-        keyboard.add(InlineKeyboardButton("В этот поход не буду брать", callback_data=f"status_{full_item[:45]}_в этот поход не буду брать"))
+        statuses = ["Беру", "Возьму позже", "В этот поход не буду брать"]
+        for status in statuses:
+            callback_data = generate_short_callback("status", f"{full_item}_{status}")
+            keyboard.add(InlineKeyboardButton(status, callback_data=callback_data))
         keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_edit"))
 
         bot.edit_message_text(f"Выберите статус для предмета '{full_item}':", 
@@ -211,17 +223,38 @@ def edit_item(call):
 @bot.callback_query_handler(func=lambda call: call.data.startswith('status_'))
 def set_status(call):
     logger.info(f"Received status callback from user {call.from_user.id}")
-    user_id = call.from_user.id
-    _, item_prefix, status = call.data.split('_')
+    try:
+        user_id = call.from_user.id
+        status_hash = call.data.split('_', 1)[1]
 
-    items = read_items()
-    full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
+        items = read_items()
+        full_item = None
+        chosen_status = None
 
-    user_responses.setdefault(user_id, {})[full_item] = status
+        for item in items:
+            for status in ["Беру", "Возьму позже", "В этот поход не буду брать"]:
+                if generate_short_callback("status", f"{item}_{status}").split('_')[1] == status_hash:
+                    full_item = item
+                    chosen_status = status
+                    break
+            if full_item:
+                break
 
-    bot.answer_callback_query(call.id, f"Статус обновлен: {status}")
+        if not full_item or not chosen_status:
+            logger.error(f"Item or status not found for hash {status_hash}")
+            bot.answer_callback_query(call.id, "Извините, произошла ошибка при обновлении статуса.")
+            return
 
-    edit_list_callback(call)
+        user_responses.setdefault(user_id, {})[full_item] = chosen_status
+
+        bot.answer_callback_query(call.id, f"Статус обновлен: {chosen_status}")
+
+        edit_list(call.message)
+    except Exception as e:
+        logger.error(f"Error in set_status for user {call.from_user.id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Произошла ошибка при обработке запроса.")
+        bot.send_message(call.message.chat.id, "Извините, произошла ошибка при обновлении статуса предмета.")
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_edit")
 def edit_list_callback(call):
