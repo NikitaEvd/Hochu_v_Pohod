@@ -84,13 +84,7 @@ def ask_object(chat_id, user_id):
 
     if current_object < len(items):
         logger.debug(f"Asking user {user_id} about item: {items[current_object]}")
-        
-        # Форматируем текст в скобках курсивом
-        formatted_item = re.sub(r'\((.*?)\)', r'(_\1_)', items[current_object])
-        
-        bot.send_message(chat_id, ITEM_PROMPT.format(formatted_item), 
-                         reply_markup=get_pack_keyboard(), 
-                         parse_mode='Markdown')
+        bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
 
