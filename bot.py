@@ -3,8 +3,9 @@ import telebot
 from telebot.types import ReplyKeyboardMarkup, KeyboardButton, BotCommand, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 import logging
 import time
+import traceback
 
-# Логирование
+# Расширенное логирование
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -128,56 +129,76 @@ def show_lists(chat_id, user_id):
 @bot.callback_query_handler(func=lambda call: call.data == "edit_list")
 def handle_edit_list(call):
     logger.info(f"Received 'Редактировать список' callback from user {call.from_user.id}")
-    if user_responses.get(call.from_user.id):
-        edit_list(call.message)
-    else:
-        bot.send_message(call.message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
+    try:
+        if user_responses.get(call.from_user.id):
+            logger.debug(f"User {call.from_user.id} has saved responses. Proceeding to edit_list.")
+            edit_list(call.message)
+        else:
+            logger.warning(f"User {call.from_user.id} has no saved responses.")
+            bot.answer_callback_query(call.id, "У вас нет сохраненных ответов. Начните сбор заново.")
+            bot.send_message(call.message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
+    except Exception as e:
+        logger.error(f"Error in handle_edit_list for user {call.from_user.id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Произошла ошибка при обработке запроса.")
+        bot.send_message(call.message.chat.id, "Извините, произошла ошибка при обработке вашего запроса.")
 
 def edit_list(message):
     logger.debug(f"Entered edit_list function for user {message.chat.id}")
-    user_id = message.chat.id
-    items = read_items()
-    responses = user_responses.get(user_id, {})
+    try:
+        user_id = message.chat.id
+        items = read_items()
+        responses = user_responses.get(user_id, {})
 
-    if not responses:
-        logger.info(f"No saved responses for user {user_id}")
-        bot.send_message(message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
-        return
+        if not responses:
+            logger.info(f"No saved responses for user {user_id}")
+            bot.send_message(message.chat.id, "У вас пока нет сохраненных ответов. Начните сбор заново.")
+            return
 
-    logger.debug(f"Creating keyboard for item editing for user {user_id}")
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for item in items:
-        status = responses.get(item, 'Не задано')
-        callback_data = f"edit_{item[:45]}"
-        keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
+        logger.debug(f"Creating keyboard for item editing for user {user_id}")
+        keyboard = InlineKeyboardMarkup(row_width=1)
+        for item in items:
+            status = responses.get(item, 'Не задано')
+            callback_data = f"edit_{item[:45]}"
+            keyboard.add(InlineKeyboardButton(f"{item} - {status}", callback_data=callback_data))
 
-    keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
+        keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_final"))
 
-    logger.debug(f"Sending edit list message to user {user_id}")
-    bot.edit_message_text("Выберите предмет для редактирования:", 
-                          message.chat.id, 
-                          message.message_id, 
-                          reply_markup=keyboard)
+        logger.debug(f"Sending edit list message to user {user_id}")
+        bot.edit_message_text("Выберите предмет для редактирования:", 
+                              message.chat.id, 
+                              message.message_id, 
+                              reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Error in edit_list for user {message.chat.id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        bot.send_message(message.chat.id, "Извините, произошла ошибка при отображении списка для редактирования.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('edit_'))
 def edit_item(call):
     logger.info(f"Received edit callback from user {call.from_user.id}")
-    user_id = call.from_user.id
-    item_prefix = call.data.split('_', 1)[1]
+    try:
+        user_id = call.from_user.id
+        item_prefix = call.data.split('_', 1)[1]
 
-    items = read_items()
-    full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
+        items = read_items()
+        full_item = next((i for i in items if i.startswith(item_prefix)), item_prefix)
 
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    keyboard.add(InlineKeyboardButton("Да", callback_data=f"status_{full_item[:45]}_да"))
-    keyboard.add(InlineKeyboardButton("Нет", callback_data=f"status_{full_item[:45]}_нет"))
-    keyboard.add(InlineKeyboardButton("Отложить", callback_data=f"status_{full_item[:45]}_отложить"))
-    keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_edit"))
+        keyboard = InlineKeyboardMarkup(row_width=1)
+        keyboard.add(InlineKeyboardButton("Беру", callback_data=f"status_{full_item[:45]}_беру"))
+        keyboard.add(InlineKeyboardButton("Возьму позже", callback_data=f"status_{full_item[:45]}_возьму позже"))
+        keyboard.add(InlineKeyboardButton("В этот поход не буду брать", callback_data=f"status_{full_item[:45]}_в этот поход не буду брать"))
+        keyboard.add(InlineKeyboardButton("Назад", callback_data="back_to_edit"))
 
-    bot.edit_message_text(f"Выберите статус для предмета '{full_item}':", 
-                          call.message.chat.id, 
-                          call.message.message_id, 
-                          reply_markup=keyboard)
+        bot.edit_message_text(f"Выберите статус для предмета '{full_item}':", 
+                              call.message.chat.id, 
+                              call.message.message_id, 
+                              reply_markup=keyboard)
+    except Exception as e:
+        logger.error(f"Error in edit_item for user {call.from_user.id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, "Произошла ошибка при обработке запроса.")
+        bot.send_message(call.message.chat.id, "Извините, произошла ошибка при редактировании предмета.")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('status_'))
 def set_status(call):
@@ -262,4 +283,5 @@ if __name__ == '__main__':
             bot.polling(none_stop=True)
         except Exception as e:
             logger.error(f"Bot crashed. Restarting. Error: {e}")
+            logger.error(traceback.format_exc())
             time.sleep(10)
