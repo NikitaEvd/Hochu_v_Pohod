@@ -115,9 +115,9 @@ def finish_packing(chat_id, user_id):
 def show_lists(chat_id, user_id):
     responses = user_responses.get(user_id, {})
 
-    packed = [item for item, status in responses.items() if status == BUTTON_TAKE.lower()]
-    not_packed = [item for item, status in responses.items() if status == BUTTON_TAKE_LATER.lower()]
-    postponed = [item for item, status in responses.items() if status == BUTTON_SKIP.lower()]
+    packed = [item for item, status in responses.items() if status.lower() == BUTTON_TAKE.lower()]
+    not_packed = [item for item, status in responses.items() if status.lower() == BUTTON_TAKE_LATER.lower()]
+    postponed = [item for item, status in responses.items() if status.lower() == BUTTON_SKIP.lower()]
 
     result = PACKING_RESULT.format(
         "\n".join(f"- {item}" for item in packed),
@@ -249,6 +249,9 @@ def set_status(call):
 
         bot.answer_callback_query(call.id, STATUS_UPDATED.format(chosen_status))
 
+        # Показываем обновленные списки после изменения статуса
+        show_lists(call.message.chat.id, user_id)
+
         edit_list(call.message)
     except Exception as e:
         logger.error(f"Error in set_status for user {call.from_user.id}: {str(e)}")
@@ -279,10 +282,16 @@ def edit_list_callback(call):
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_final")
 def back_to_final(call):
     logger.info(f"Returning to final menu for user {call.from_user.id}")
-    bot.edit_message_text(WHAT_NEXT_MESSAGE, 
-                          call.message.chat.id, 
-                          call.message.message_id, 
-                          reply_markup=get_final_keyboard())
+    user_id = call.from_user.id
+    
+    # Показываем обновленные списки
+    show_lists(call.message.chat.id, user_id)
+    
+    # Отправляем сообщение с финальным меню
+    bot.send_message(call.message.chat.id, WHAT_NEXT_MESSAGE, reply_markup=get_final_keyboard())
+    
+    # Удаляем предыдущее сообщение с кнопками редактирования
+    bot.delete_message(call.message.chat.id, call.message.message_id)
 
 @bot.callback_query_handler(func=lambda call: call.data == "restart_packing")
 def restart_packing(call):
