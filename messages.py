@@ -17,7 +17,7 @@ ITEM_PROMPT = "{}"
 NO_SAVED_RESPONSES = "У вас пока нет сохраненных ответов. Начните сбор заново."
 CHOOSE_ITEM_TO_EDIT = "Выберите пункт для редактирования:"
 CHOOSE_ITEM_STATUS = "Выберите статус '{}':"
-STATUS_UPDATED = "Статус обновлен: {}"
+STATUS_UPDATED = "Статус обновлен:"
 RESTART_PACKING_MESSAGE = "Давайте начнем сбор заново. Берите все по списку:"
 UNKNOWN_COMMAND = "Извините, я не понимаю эту команду. Пожалуйста, используйте /start или /reset."
 
