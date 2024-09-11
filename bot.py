@@ -76,8 +76,17 @@ def pack(message):
 def show_full_list(message):
     logger.info(f"User {message.from_user.id} requested full list")
     items = read_items()
-    object_list = "\n".join([f"- {item}" for item in items])
-    bot.send_message(message.chat.id, SHOW_FULL_LIST_PROMPT.format(object_list), reply_markup=get_start_keyboard())
+    object_list = "\n".join([f"• {item}" for item in items])
+    
+    # Создаем клавиатуру с кнопкой "Начать сборы"
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    keyboard.add(KeyboardButton(BUTTON_PACK))
+    
+    # Отправляем сообщение с списком вещей, используя Markdown для форматирования
+    bot.send_message(message.chat.id, 
+                     SHOW_FULL_LIST_PROMPT.format(object_list), 
+                     reply_markup=keyboard, 
+                     parse_mode='Markdown')
 
 def ask_object(chat_id, user_id):
     items = read_items()
