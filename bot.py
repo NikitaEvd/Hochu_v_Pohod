@@ -295,6 +295,19 @@ def set_status(call):
             bot.answer_callback_query(call.id, GENERAL_ERROR)
             return
 
+        user_responses.setdefault(user_id, {})[full_item] = chosen_status
+
+        status_icon = get_status_icon(chosen_status)
+        bot.answer_callback_query(call.id, f"{STATUS_UPDATED}: {status_icon}")
+
+        # Обновляем сообщение с текущим статусом редактирования
+        edit_list(call.message)
+    except Exception as e:
+        logger.error(f"Error in set_status for user {call.from_user.id}: {str(e)}")
+        logger.error(traceback.format_exc())
+        bot.answer_callback_query(call.id, GENERAL_ERROR)
+        bot.send_message(call.message.chat.id, UPDATE_STATUS_ERROR)
+
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_edit")
 def edit_list_callback(call):
     logger.debug(f"Returning to edit list for user {call.from_user.id}")
