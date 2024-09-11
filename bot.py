@@ -35,6 +35,7 @@ user_progress = {}
 user_responses = {}
 
 # Функции создания клавиатур
+
 def get_start_keyboard():
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton(BUTTON_PACK), KeyboardButton(BUTTON_SHOW_LIST))
@@ -59,11 +60,11 @@ def reset_progress(user_id):
 # Работа со списком
 
 def get_item_name(item):
-    """Извлекает название вещи без описания в скобках."""
-    return re.sub(r'\s*\(.*?\)\s*', '', item).strip()
+    name_without_description = re.sub(r'\s*\(.*?\)\s*', '', item).strip()
+    clean_name = re.sub(r'[*_`]', '', name_without_description)
+    return clean_name
 
 def get_status_icon(status):
-    """Возвращает эмодзи-иконку для соответствующего статуса."""
     if status.lower() == BUTTON_TAKE.lower():
         return "✅"  
     elif status.lower() == BUTTON_SKIP.lower():
@@ -71,9 +72,10 @@ def get_status_icon(status):
     elif status.lower() == BUTTON_TAKE_LATER.lower():
         return "⏳"  
     else:
-        return "❓"  # Неизвестный статус
+        return "❓"  
 
 # Хендлеры сообщений
+
 @bot.message_handler(commands=[COMMAND_START, COMMAND_RESET])
 def start(message):
     logger.info(f"Received start/reset command from user {message.from_user.id}")
