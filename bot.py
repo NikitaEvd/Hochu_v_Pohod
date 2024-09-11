@@ -56,6 +56,23 @@ def reset_progress(user_id):
     user_progress[user_id] = 0
     user_responses[user_id] = {}
 
+# Работа со списком
+
+def get_item_name(item):
+    """Извлекает название вещи без описания в скобках."""
+    return re.sub(r'\s*\(.*?\)\s*', '', item).strip()
+
+def get_status_icon(status):
+    """Возвращает эмодзи-иконку для соответствующего статуса."""
+    if status.lower() == BUTTON_TAKE.lower():
+        return "✅"  
+    elif status.lower() == BUTTON_SKIP.lower():
+        return "❌"  
+    elif status.lower() == BUTTON_TAKE_LATER.lower():
+        return "⏳"  
+    else:
+        return "❓"  # Неизвестный статус
+
 # Хендлеры сообщений
 @bot.message_handler(commands=[COMMAND_START, COMMAND_RESET])
 def start(message):
@@ -195,9 +212,9 @@ def edit_list(message):
         for item in items:
             status = responses.get(item, 'Не задано')
             callback_data = generate_short_callback("edit", item)
-            # Удаляем Markdown разметку из item
-            clean_item = re.sub(r'[*_`\[\]]', '', item)
-            button_text = f"{clean_item} - {status}"
+            item_name = get_item_name(item)
+            status_icon = get_status_icon(status)
+            button_text = f"{item_name} {status_icon}"
             keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
         keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
@@ -278,18 +295,6 @@ def set_status(call):
             bot.answer_callback_query(call.id, GENERAL_ERROR)
             return
 
-        user_responses.setdefault(user_id, {})[full_item] = chosen_status
-
-        bot.answer_callback_query(call.id, STATUS_UPDATED.format(chosen_status))
-
-        # Обновляем сообщение с текущим статусом редактирования
-        edit_list(call.message)
-    except Exception as e:
-        logger.error(f"Error in set_status for user {call.from_user.id}: {str(e)}")
-        logger.error(traceback.format_exc())
-        bot.answer_callback_query(call.id, GENERAL_ERROR)
-        bot.send_message(call.message.chat.id, UPDATE_STATUS_ERROR)
-
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_edit")
 def edit_list_callback(call):
     logger.debug(f"Returning to edit list for user {call.from_user.id}")
@@ -301,9 +306,9 @@ def edit_list_callback(call):
     for item in items:
         status = responses.get(item, 'Не задано')
         callback_data = generate_short_callback("edit", item)
-        # Удаляем Markdown разметку из item
-        clean_item = re.sub(r'[*_`\[\]]', '', item)
-        button_text = f"{clean_item} - {status}"
+        item_name = get_item_name(item)
+        status_icon = get_status_icon(status)
+        button_text = f"{item_name} {status_icon}"
         keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
     keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
