@@ -49,7 +49,6 @@ def get_pack_keyboard():
 def get_final_keyboard():
     keyboard = InlineKeyboardMarkup()
     keyboard.row(InlineKeyboardButton(BUTTON_EDIT_LIST, callback_data="edit_list"))
-    keyboard.row(InlineKeyboardButton(BUTTON_SHOW_FULL_LIST, callback_data="show_full_list"))
     keyboard.row(InlineKeyboardButton(BUTTON_RESTART_PACKING, callback_data="restart_packing"))
     return keyboard
 
@@ -96,12 +95,8 @@ def show_full_list(message):
     logger.info(f"User {message.from_user.id} requested full list")
     items = read_items()
     object_list = "\n".join([f"• {item}" for item in items])
-    
-    # Создаем клавиатуру с кнопкой "Начать сборы"
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton(BUTTON_PACK))
-    
-    # Отправляем сообщение с списком вещей, используя Markdown для форматирования
     bot.send_message(message.chat.id, 
                      SHOW_FULL_LIST_PROMPT.format(object_list), 
                      reply_markup=keyboard, 
@@ -166,7 +161,6 @@ def show_lists(chat_id, user_id):
     if postponed:
         result += "Не будете брать в этот поход:\n" + "\n".join(f"- {item}" for item in postponed)
 
-    # Удаляем лишние пустые строки в конце
     result = result.rstrip()
 
     try:
@@ -355,17 +349,6 @@ def restart_packing(call):
     bot.delete_message(call.message.chat.id, call.message.message_id)
     bot.send_message(call.message.chat.id, RESTART_PACKING_MESSAGE, reply_markup=get_pack_keyboard())
     ask_object(call.message.chat.id, user_id)
-
-@bot.callback_query_handler(func=lambda call: call.data == "show_full_list")
-def show_full_list_after_packing(call):
-    logger.info(f"User {call.from_user.id} requested full list after packing")
-    items = read_items()
-    object_list = "\n".join([f"- {item}" for item in items])
-    bot.send_message(call.message.chat.id, SHOW_FULL_LIST_PROMPT.format(object_list))
-    bot.edit_message_text(WHAT_NEXT_MESSAGE, 
-                          call.message.chat.id, 
-                          call.message.message_id, 
-                          reply_markup=get_final_keyboard())
 
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
