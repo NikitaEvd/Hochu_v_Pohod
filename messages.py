@@ -32,9 +32,9 @@ UPDATE_STATUS_ERROR = "Извините, произошла ошибка при 
 # Названия кнопок
 BUTTON_PACK = 'Собраться в поход'
 BUTTON_SHOW_LIST = 'Посмотреть список'
-BUTTON_TAKE = 'Беру'
-BUTTON_TAKE_LATER = 'Возьму позже'
-BUTTON_SKIP = 'В этот поход не буду брать'
+BUTTON_TAKE = '✅ Беру'
+BUTTON_TAKE_LATER = '⏳ Возьму позже'
+BUTTON_SKIP = '❌ Не беру'
 BUTTON_EDIT_LIST = "Редактировать список"
 BUTTON_SHOW_FULL_LIST = "Посмотреть весь список"
 BUTTON_RESTART_PACKING = "Собраться заново"
