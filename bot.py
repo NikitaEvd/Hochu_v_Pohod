@@ -210,7 +210,7 @@ def edit_list(message):
             callback_data = generate_short_callback("edit", item)
             item_name = get_item_name(item)
             status_icon = get_status_icon(status)
-            button_text = f"{item_name} {status_icon}"
+            button_text = f"{status_icon} {item_name}"  
             keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
         keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
@@ -317,7 +317,7 @@ def edit_list_callback(call):
         callback_data = generate_short_callback("edit", item)
         item_name = get_item_name(item)
         status_icon = get_status_icon(status)
-        button_text = f"{item_name} {status_icon}"
+        button_text = f"{status_icon} {item_name}" 
         keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
     keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
