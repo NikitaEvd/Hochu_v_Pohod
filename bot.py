@@ -109,6 +109,7 @@ def ask_object(chat_id, user_id):
         item = items[current_object]
         logger.debug(f"Asking user {user_id} about item: {item['full_name']}")
         
+        # Используем символы переноса строки из JSON напрямую
         message = f"*{item['full_name']}*\n\n{item['description']}\n\n{ITEM_PROMPT}"
         
         keyboard = get_pack_keyboard()
