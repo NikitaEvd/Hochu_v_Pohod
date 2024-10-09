@@ -21,41 +21,9 @@ if TOKEN is None:
 bot = telebot.TeleBot(TOKEN)
 
 # Чтение файла
-def read_items():
-    try:
-        with open('hiking_items.json', 'r', encoding='utf-8') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        logger.error(FILE_NOT_FOUND_ERROR)
-        return []
-    except json.JSONDecodeError as e:
-        logger.error(f"JSON decode error: {e}")
-        return []
-    except Exception as e:
-        logger.error(FILE_READ_ERROR.format(e))
-        return []
 
 user_progress = {}
 user_responses = {}
-
-# Функции создания клавиатур
-
-def get_start_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-    keyboard.add(KeyboardButton(BUTTON_PACK), KeyboardButton(BUTTON_SHOW_LIST))
-    return keyboard
-
-def get_pack_keyboard():
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
-    keyboard.add(KeyboardButton(BUTTON_TAKE), KeyboardButton(BUTTON_TAKE_LATER), KeyboardButton(BUTTON_SKIP))
-    return keyboard
-
-def get_final_keyboard():
-    keyboard = InlineKeyboardMarkup()
-    keyboard.row(InlineKeyboardButton(BUTTON_EDIT_LIST, callback_data="edit_list"))
-    keyboard.row(InlineKeyboardButton(BUTTON_RESTART_PACKING, callback_data="restart_packing"))
-    return keyboard
-
 user_data = {}
 
 def reset_progress(user_id):
@@ -77,6 +45,24 @@ def read_lists():
     except Exception as e:
         logger.error(FILE_READ_ERROR.format(e))
         return []
+
+# Функции создания клавиатур
+
+def get_start_keyboard():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    keyboard.add(KeyboardButton(BUTTON_PACK), KeyboardButton(BUTTON_SHOW_LIST))
+    return keyboard
+
+def get_pack_keyboard():
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
+    keyboard.add(KeyboardButton(BUTTON_TAKE), KeyboardButton(BUTTON_TAKE_LATER), KeyboardButton(BUTTON_SKIP))
+    return keyboard
+
+def get_final_keyboard():
+    keyboard = InlineKeyboardMarkup()
+    keyboard.row(InlineKeyboardButton(BUTTON_EDIT_LIST, callback_data="edit_list"))
+    keyboard.row(InlineKeyboardButton(BUTTON_RESTART_PACKING, callback_data="restart_packing"))
+    return keyboard
 
 def get_status_icon(status):
     if status.lower() == BUTTON_TAKE.lower():
@@ -139,12 +125,22 @@ def pack(message):
 @bot.message_handler(func=lambda message: message.text == BUTTON_SHOW_LIST)
 def show_full_list(message):
     logger.info(f"User {message.from_user.id} requested full list")
-    items = read_items()
+    user_id = message.from_user.id
+    user_data_entry = user_data.get(user_id)
+    
+    if not user_data_entry or 'current_list' not in user_data_entry:
+        show_list_selection(message.chat.id)
+        return
+    
+    current_list = user_data_entry['current_list']
+    items = current_list['items']
+    
     object_list = "\n\n".join([f"• *{item['full_name']}*\n{item['description']}" for item in items])
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton(BUTTON_PACK))
+    
     bot.send_message(message.chat.id, 
-                     SHOW_FULL_LIST_PROMPT.format(object_list), 
+                     SHOW_FULL_LIST_PROMPT.format(current_list['name'], object_list), 
                      reply_markup=keyboard, 
                      parse_mode='Markdown')
 
@@ -182,11 +178,16 @@ def ask_object(chat_id, user_id):
 @bot.message_handler(func=lambda message: message.text == BUTTON_BUY)
 def handle_buy(message):
     user_id = message.from_user.id
-    items = read_items()
-    current_object = user_progress.get(user_id, 0)
+    user_data_entry = user_data.get(user_id)
+    if not user_data_entry:
+        show_list_selection(message.chat.id)
+        return
 
-    if current_object < len(items):
-        item = items[current_object]
+    current_list = user_data_entry['current_list']
+    current_object = user_data_entry['progress']
+
+    if current_object < len(current_list['items']):
+        item = current_list['items'][current_object]
         if item['buy_link']:
             keyboard = InlineKeyboardMarkup()
             keyboard.add(InlineKeyboardButton(BUTTON_BUY_ONLINE, url=item['buy_link']))
