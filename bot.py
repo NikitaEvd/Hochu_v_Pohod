@@ -6,6 +6,7 @@ import time
 import traceback
 import hashlib
 import re
+import json
 from messages import *
 
 # Расширенное логирование
@@ -22,10 +23,13 @@ bot = telebot.TeleBot(TOKEN)
 # Чтение файла
 def read_items():
     try:
-        with open('hiking_items.txt', 'r', encoding='utf-8') as file:
-            return [line.strip() for line in file if line.strip()]
+        with open('hiking_items.json', 'r', encoding='utf-8') as file:
+            return json.load(file)
     except FileNotFoundError:
         logger.error(FILE_NOT_FOUND_ERROR)
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
         return []
     except Exception as e:
         logger.error(FILE_READ_ERROR.format(e))
@@ -58,11 +62,6 @@ def reset_progress(user_id):
 
 # Работа со списком
 
-def get_item_name(item):
-    name_without_description = re.sub(r'\s*\(.*?\)\s*', '', item).strip()
-    clean_name = re.sub(r'[*_`]', '', name_without_description)
-    return clean_name
-
 def get_status_icon(status):
     if status.lower() == BUTTON_TAKE.lower():
         return "✅"  
@@ -94,7 +93,7 @@ def pack(message):
 def show_full_list(message):
     logger.info(f"User {message.from_user.id} requested full list")
     items = read_items()
-    object_list = "\n".join([f"• {item}" for item in items])
+    object_list = "\n\n".join([f"• *{item['full_name']}*\n{item['description']}" for item in items])
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True, one_time_keyboard=False)
     keyboard.add(KeyboardButton(BUTTON_PACK))
     bot.send_message(message.chat.id, 
@@ -107,14 +106,14 @@ def ask_object(chat_id, user_id):
     current_object = user_progress.get(user_id, 0)
 
     if current_object < len(items):
-        logger.debug(f"Asking user {user_id} about item: {items[current_object]}")
+        logger.debug(f"Asking user {user_id} about item: {items[current_object]['full_name']}")
         try:
-            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
+            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]['full_name']), 
                              reply_markup=get_pack_keyboard(),
                              parse_mode='Markdown')
         except telebot.apihelper.ApiException as e:
             logger.error(f"Failed to send message with Markdown. Sending without formatting. Error: {e}")
-            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]), 
+            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]['full_name']), 
                              reply_markup=get_pack_keyboard())
     else:
         finish_packing(chat_id, user_id)
@@ -128,8 +127,8 @@ def handle_response(message):
     current_object = user_progress.get(user_id, 0)
 
     if current_object < len(items):
-        logger.debug(f"User {user_id} responded {response} to item {items[current_object]}")
-        user_responses.setdefault(user_id, {})[items[current_object]] = response
+        logger.debug(f"User {user_id} responded {response} to item {items[current_object]['full_name']}")
+        user_responses.setdefault(user_id, {})[items[current_object]['full_name']] = response
         user_progress[user_id] = current_object + 1
         ask_object(message.chat.id, user_id)
     else:
@@ -145,21 +144,22 @@ def finish_packing(chat_id, user_id):
 
 def show_lists(chat_id, user_id):
     responses = user_responses.get(user_id, {})
+    items = read_items()
 
-    packed = [item for item, status in responses.items() if status.lower() == BUTTON_TAKE.lower()]
-    not_packed = [item for item, status in responses.items() if status.lower() == BUTTON_TAKE_LATER.lower()]
-    postponed = [item for item, status in responses.items() if status.lower() == BUTTON_SKIP.lower()]
+    packed = [item for item in items if responses.get(item['full_name'], '').lower() == BUTTON_TAKE.lower()]
+    not_packed = [item for item in items if responses.get(item['full_name'], '').lower() == BUTTON_TAKE_LATER.lower()]
+    postponed = [item for item in items if responses.get(item['full_name'], '').lower() == BUTTON_SKIP.lower()]
 
     result = "Вот, что получилось:\n\n"
     
     if packed:
-        result += "Уже в рюкзаке:\n" + "\n".join(f"- {item}" for item in packed) + "\n\n"
+        result += "Уже в рюкзаке:\n" + "\n".join(f"- *{item['full_name']}*" for item in packed) + "\n\n"
     
     if not_packed:
-        result += "Не забыть положить позже:\n" + "\n".join(f"- {item}" for item in not_packed) + "\n\n"
+        result += "Не забыть положить позже:\n" + "\n".join(f"- *{item['full_name']}*" for item in not_packed) + "\n\n"
     
     if postponed:
-        result += "Не будете брать в этот поход:\n" + "\n".join(f"- {item}" for item in postponed)
+        result += "Не будете брать в этот поход:\n" + "\n".join(f"- *{item['full_name']}*" for item in postponed)
 
     result = result.rstrip()
 
@@ -206,11 +206,10 @@ def edit_list(message):
         logger.debug(f"Creating keyboard for item editing for user {user_id}")
         keyboard = InlineKeyboardMarkup(row_width=1)
         for item in items:
-            status = responses.get(item, 'Не задано')
-            callback_data = generate_short_callback("edit", item)
-            item_name = get_item_name(item)
+            status = responses.get(item['full_name'], 'Не задано')
+            callback_data = generate_short_callback("edit", item['full_name'])
             status_icon = get_status_icon(status)
-            button_text = f"{status_icon} {item_name}"  
+            button_text = f"{status_icon} {item['short_name']}"  
             keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
 
         keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
@@ -241,7 +240,7 @@ def edit_item(call):
         item_hash = call.data.split('_', 1)[1]
 
         items = read_items()
-        full_item = next((item for item in items if generate_short_callback("edit", item).split('_')[1] == item_hash), None)
+        full_item = next((item for item in items if generate_short_callback("edit", item['full_name']).split('_')[1] == item_hash), None)
 
         if full_item is None:
             logger.error(f"Item not found for hash {item_hash}")
@@ -251,11 +250,16 @@ def edit_item(call):
         keyboard = InlineKeyboardMarkup(row_width=1)
         statuses = [BUTTON_TAKE, BUTTON_TAKE_LATER, BUTTON_SKIP]
         for status in statuses:
-            callback_data = generate_short_callback("status", f"{full_item}_{status}")
+            callback_data = generate_short_callback("status", f"{full_item['full_name']}_{status}")
             keyboard.add(InlineKeyboardButton(status, callback_data=callback_data))
         keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_edit"))
 
-        bot.edit_message_text(CHOOSE_ITEM_STATUS.format(full_item), 
+        message_text = f"*{full_item['full_name']}*\n\n{full_item['description']}\n\n{CHOOSE_ITEM_STATUS}"
+        
+        if full_item['buy_link']:
+            keyboard.add(InlineKeyboardButton("Купить", url=full_item['buy_link']))
+
+        bot.edit_message_text(message_text, 
                               call.message.chat.id, 
                               call.message.message_id, 
                               reply_markup=keyboard,
@@ -279,7 +283,7 @@ def set_status(call):
 
         for item in items:
             for status in [BUTTON_TAKE, BUTTON_TAKE_LATER, BUTTON_SKIP]:
-                if generate_short_callback("status", f"{item}_{status}").split('_')[1] == status_hash:
+                if generate_short_callback("status", f"{item['full_name']}_{status}").split('_')[1] == status_hash:
                     full_item = item
                     chosen_status = status
                     break
@@ -291,7 +295,7 @@ def set_status(call):
             bot.answer_callback_query(call.id, GENERAL_ERROR)
             return
 
-        user_responses.setdefault(user_id, {})[full_item] = chosen_status
+        user_responses.setdefault(user_id, {})[full_item['full_name']] = chosen_status
 
         status_icon = get_status_icon(chosen_status)
         bot.answer_callback_query(call.id, f"{STATUS_UPDATED}: {status_icon}")
@@ -307,25 +311,7 @@ def set_status(call):
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_edit")
 def edit_list_callback(call):
     logger.debug(f"Returning to edit list for user {call.from_user.id}")
-    user_id = call.from_user.id
-    items = read_items()
-    responses = user_responses.get(user_id, {})
-
-    keyboard = InlineKeyboardMarkup(row_width=1)
-    for item in items:
-        status = responses.get(item, 'Не задано')
-        callback_data = generate_short_callback("edit", item)
-        item_name = get_item_name(item)
-        status_icon = get_status_icon(status)
-        button_text = f"{status_icon} {item_name}" 
-        keyboard.add(InlineKeyboardButton(button_text, callback_data=callback_data))
-
-    keyboard.add(InlineKeyboardButton(BUTTON_BACK, callback_data="back_to_final"))
-
-    bot.edit_message_text(CHOOSE_ITEM_TO_EDIT, 
-                          call.message.chat.id, 
-                          call.message.message_id, 
-                          reply_markup=keyboard)
+    edit_list(call.message)
 
 @bot.callback_query_handler(func=lambda call: call.data == "back_to_final")
 def back_to_final(call):
