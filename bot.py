@@ -106,17 +106,43 @@ def ask_object(chat_id, user_id):
     current_object = user_progress.get(user_id, 0)
 
     if current_object < len(items):
-        logger.debug(f"Asking user {user_id} about item: {items[current_object]['full_name']}")
+        item = items[current_object]
+        logger.debug(f"Asking user {user_id} about item: {item['full_name']}")
+        
+        message = f"*{item['full_name']}*\n\n{item['description']}\n\n{ITEM_PROMPT}"
+        
+        keyboard = get_pack_keyboard()
+        
+        if item['buy_link']:
+            keyboard.add(KeyboardButton(BUTTON_BUY))
+        
         try:
-            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]['full_name']), 
-                             reply_markup=get_pack_keyboard(),
+            bot.send_message(chat_id, message, 
+                             reply_markup=keyboard,
                              parse_mode='Markdown')
         except telebot.apihelper.ApiException as e:
             logger.error(f"Failed to send message with Markdown. Sending without formatting. Error: {e}")
-            bot.send_message(chat_id, ITEM_PROMPT.format(items[current_object]['full_name']), 
-                             reply_markup=get_pack_keyboard())
+            bot.send_message(chat_id, message, 
+                             reply_markup=keyboard)
     else:
         finish_packing(chat_id, user_id)
+
+@bot.message_handler(func=lambda message: message.text == BUTTON_BUY)
+def handle_buy(message):
+    user_id = message.from_user.id
+    items = read_items()
+    current_object = user_progress.get(user_id, 0)
+
+    if current_object < len(items):
+        item = items[current_object]
+        if item['buy_link']:
+            keyboard = InlineKeyboardMarkup()
+            keyboard.add(InlineKeyboardButton(BUTTON_BUY_ONLINE, url=item['buy_link']))
+            bot.send_message(message.chat.id, BUY_PROMPT.format(item['full_name']), reply_markup=keyboard)
+        else:
+            bot.send_message(message.chat.id, NO_BUY_LINK)
+    else:
+        bot.send_message(message.chat.id, PACKING_FINISHED_MESSAGE)
 
 @bot.message_handler(func=lambda message: message.text in [BUTTON_TAKE, BUTTON_TAKE_LATER, BUTTON_SKIP])
 def handle_response(message):
