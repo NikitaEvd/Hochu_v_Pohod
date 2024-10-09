@@ -56,11 +56,27 @@ def get_final_keyboard():
     keyboard.row(InlineKeyboardButton(BUTTON_RESTART_PACKING, callback_data="restart_packing"))
     return keyboard
 
+user_data = {}
+
 def reset_progress(user_id):
-    user_progress[user_id] = 0
-    user_responses[user_id] = {}
+    user_data.pop(user_id, None)
 
 # Работа со списком
+
+def read_lists():
+    try:
+        with open('hiking_lists.json', 'r', encoding='utf-8') as file:
+            data = json.load(file)
+            return data['lists']
+    except FileNotFoundError:
+        logger.error(FILE_NOT_FOUND_ERROR)
+        return []
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON decode error: {e}")
+        return []
+    except Exception as e:
+        logger.error(FILE_READ_ERROR.format(e))
+        return []
 
 def get_status_icon(status):
     if status.lower() == BUTTON_TAKE.lower():
@@ -74,12 +90,43 @@ def get_status_icon(status):
 
 # Хендлеры сообщений
 
+@bot.callback_query_handler(func=lambda call: call.data.startswith('select_list_'))
+def handle_list_selection(call):
+    list_id = call.data.split('_')[2]
+    user_id = call.from_user.id
+    
+    lists = read_lists()
+    selected_list = next((l for l in lists if l['id'] == list_id), None)
+    
+    if selected_list:
+        user_data[user_id] = {
+            'current_list': selected_list,
+            'progress': 0,
+            'responses': {}
+        }
+        bot.answer_callback_query(call.id, f"Вы выбрали: {selected_list['name']}")
+        bot.edit_message_text(f"Вы выбрали: {selected_list['name']}\n\n{selected_list['description']}\n\nНачнем сбор снаряжения?",
+                              call.message.chat.id,
+                              call.message.message_id,
+                              reply_markup=get_start_keyboard())
+    else:
+        bot.answer_callback_query(call.id, "Ошибка: список не найден")
+
+def show_list_selection(chat_id):
+    lists = read_lists()
+    keyboard = InlineKeyboardMarkup()
+    for hiking_list in lists:
+        callback_data = f"select_list_{hiking_list['id']}"
+        keyboard.add(InlineKeyboardButton(hiking_list['name'], callback_data=callback_data))
+    
+    bot.send_message(chat_id, "Выберите тип похода:", reply_markup=keyboard)
+
 @bot.message_handler(commands=[COMMAND_START, COMMAND_RESET])
 def start(message):
     logger.info(f"Received start/reset command from user {message.from_user.id}")
     user_id = message.from_user.id
     reset_progress(user_id)
-    bot.send_message(message.chat.id, START_MESSAGE, reply_markup=get_start_keyboard())
+    show_list_selection(message.chat.id)
 
 @bot.message_handler(func=lambda message: message.text == BUTTON_PACK)
 def pack(message):
@@ -102,14 +149,18 @@ def show_full_list(message):
                      parse_mode='Markdown')
 
 def ask_object(chat_id, user_id):
-    items = read_items()
-    current_object = user_progress.get(user_id, 0)
+    user_data_entry = user_data.get(user_id)
+    if not user_data_entry:
+        show_list_selection(chat_id)
+        return
 
-    if current_object < len(items):
-        item = items[current_object]
+    current_list = user_data_entry['current_list']
+    current_object = user_data_entry['progress']
+
+    if current_object < len(current_list['items']):
+        item = current_list['items'][current_object]
         logger.debug(f"Asking user {user_id} about item: {item['full_name']}")
         
-        # Используем символы переноса строки из JSON напрямую
         message = f"*{item['full_name']}*\n\n{item['description']}\n\n{ITEM_PROMPT}"
         
         keyboard = get_pack_keyboard()
@@ -150,19 +201,30 @@ def handle_response(message):
     user_id = message.from_user.id
     response = message.text.lower()
 
-    items = read_items()
-    current_object = user_progress.get(user_id, 0)
+    user_data_entry = user_data.get(user_id)
+    if not user_data_entry:
+        show_list_selection(message.chat.id)
+        return
 
-    if current_object < len(items):
-        logger.debug(f"User {user_id} responded {response} to item {items[current_object]['full_name']}")
-        user_responses.setdefault(user_id, {})[items[current_object]['full_name']] = response
-        user_progress[user_id] = current_object + 1
+    current_list = user_data_entry['current_list']
+    current_object = user_data_entry['progress']
+
+    if current_object < len(current_list['items']):
+        item = current_list['items'][current_object]
+        logger.debug(f"User {user_id} responded {response} to item {item['full_name']}")
+        user_data_entry['responses'][item['full_name']] = response
+        user_data_entry['progress'] += 1
         ask_object(message.chat.id, user_id)
     else:
         finish_packing(message.chat.id, user_id)
 
 def finish_packing(chat_id, user_id):
     logger.info(f"Finishing packing for user {user_id}")
+    user_data_entry = user_data.get(user_id)
+    if not user_data_entry:
+        show_list_selection(chat_id)
+        return
+
     bot.send_message(chat_id, PACKING_FINISHED_MESSAGE, reply_markup=ReplyKeyboardRemove())
     show_lists(chat_id, user_id)
     final_keyboard = get_final_keyboard()
@@ -170,14 +232,19 @@ def finish_packing(chat_id, user_id):
     bot.send_message(chat_id, WHAT_NEXT_MESSAGE, reply_markup=final_keyboard)
 
 def show_lists(chat_id, user_id):
-    responses = user_responses.get(user_id, {})
-    items = read_items()
+    user_data_entry = user_data.get(user_id)
+    if not user_data_entry:
+        show_list_selection(chat_id)
+        return
 
-    packed = [item for item in items if responses.get(item['full_name'], '').lower() == BUTTON_TAKE.lower()]
-    not_packed = [item for item in items if responses.get(item['full_name'], '').lower() == BUTTON_TAKE_LATER.lower()]
-    postponed = [item for item in items if responses.get(item['full_name'], '').lower() == BUTTON_SKIP.lower()]
+    responses = user_data_entry['responses']
+    current_list = user_data_entry['current_list']
 
-    result = "Вот, что получилось:\n\n"
+    packed = [item for item in current_list['items'] if responses.get(item['full_name'], '').lower() == BUTTON_TAKE.lower()]
+    not_packed = [item for item in current_list['items'] if responses.get(item['full_name'], '').lower() == BUTTON_TAKE_LATER.lower()]
+    postponed = [item for item in current_list['items'] if responses.get(item['full_name'], '').lower() == BUTTON_SKIP.lower()]
+
+    result = f"Результаты сбора для похода: *{current_list['name']}*\n\n"
     
     if packed:
         result += "Уже в рюкзаке:\n" + "\n".join(f"- *{item['full_name']}*" for item in packed) + "\n\n"
@@ -200,7 +267,8 @@ def show_lists(chat_id, user_id):
 def handle_edit_list(call):
     logger.info(f"Received 'Редактировать список' callback from user {call.from_user.id}")
     try:
-        if user_responses.get(call.from_user.id):
+        user_data_entry = user_data.get(call.from_user.id)
+        if user_data_entry and user_data_entry['responses']:
             logger.debug(f"User {call.from_user.id} has saved responses. Proceeding to edit_list.")
             edit_list(call.message)
         else:
@@ -222,8 +290,13 @@ def edit_list(message):
     logger.debug(f"Entered edit_list function for user {message.chat.id}")
     try:
         user_id = message.chat.id
-        items = read_items()
-        responses = user_responses.get(user_id, {})
+        user_data_entry = user_data.get(user_id)
+        if not user_data_entry:
+            show_list_selection(message.chat.id)
+            return
+
+        current_list = user_data_entry['current_list']
+        responses = user_data_entry['responses']
 
         if not responses:
             logger.info(f"No saved responses for user {user_id}")
@@ -232,7 +305,7 @@ def edit_list(message):
 
         logger.debug(f"Creating keyboard for item editing for user {user_id}")
         keyboard = InlineKeyboardMarkup(row_width=1)
-        for item in items:
+        for item in current_list['items']:
             status = responses.get(item['full_name'], 'Не задано')
             callback_data = generate_short_callback("edit", item['full_name'])
             status_icon = get_status_icon(status)
@@ -264,10 +337,15 @@ def edit_item(call):
     logger.info(f"Received edit callback from user {call.from_user.id}")
     try:
         user_id = call.from_user.id
-        item_hash = call.data.split('_', 1)[1]
+        user_data_entry = user_data.get(user_id)
+        if not user_data_entry:
+            show_list_selection(call.message.chat.id)
+            return
 
-        items = read_items()
-        full_item = next((item for item in items if generate_short_callback("edit", item['full_name']).split('_')[1] == item_hash), None)
+        item_hash = call.data.split('_', 1)[1]
+        current_list = user_data_entry['current_list']
+
+        full_item = next((item for item in current_list['items'] if generate_short_callback("edit", item['full_name']).split('_')[1] == item_hash), None)
 
         if full_item is None:
             logger.error(f"Item not found for hash {item_hash}")
@@ -302,13 +380,18 @@ def set_status(call):
     logger.info(f"Received status callback from user {call.from_user.id}")
     try:
         user_id = call.from_user.id
-        status_hash = call.data.split('_', 1)[1]
+        user_data_entry = user_data.get(user_id)
+        if not user_data_entry:
+            show_list_selection(call.message.chat.id)
+            return
 
-        items = read_items()
+        status_hash = call.data.split('_', 1)[1]
+        current_list = user_data_entry['current_list']
+
         full_item = None
         chosen_status = None
 
-        for item in items:
+        for item in current_list['items']:
             for status in [BUTTON_TAKE, BUTTON_TAKE_LATER, BUTTON_SKIP]:
                 if generate_short_callback("status", f"{item['full_name']}_{status}").split('_')[1] == status_hash:
                     full_item = item
@@ -322,7 +405,7 @@ def set_status(call):
             bot.answer_callback_query(call.id, GENERAL_ERROR)
             return
 
-        user_responses.setdefault(user_id, {})[full_item['full_name']] = chosen_status
+        user_data_entry['responses'][full_item['full_name']] = chosen_status
 
         status_icon = get_status_icon(chosen_status)
         bot.answer_callback_query(call.id, f"{STATUS_UPDATED}: {status_icon}")
@@ -360,8 +443,7 @@ def restart_packing(call):
     user_id = call.from_user.id
     reset_progress(user_id)
     bot.delete_message(call.message.chat.id, call.message.message_id)
-    bot.send_message(call.message.chat.id, RESTART_PACKING_MESSAGE, reply_markup=get_pack_keyboard())
-    ask_object(call.message.chat.id, user_id)
+    show_list_selection(call.message.chat.id)
 
 @bot.message_handler(func=lambda message: True)
 def echo_all(message):
