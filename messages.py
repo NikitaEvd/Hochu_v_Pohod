@@ -20,6 +20,10 @@ CHOOSE_ITEM_STATUS = "Выберите статус:"
 STATUS_UPDATED = "Статус обновлен"
 RESTART_PACKING_MESSAGE = "Давайте начнем сбор заново. Берите все по списку:"
 UNKNOWN_COMMAND = "Извините, я не понимаю эту команду. Пожалуйста, используйте /start или /reset."
+BUTTON_BUY = "Купить"
+BUTTON_BUY_ONLINE = "Купить онлайн"
+BUY_PROMPT = "Вы можете купить {} по ссылке ниже:"
+NO_BUY_LINK = "К сожалению, у нас нет ссылки для покупки этого предмета."
 
 # Сообщения об ошибках
 FILE_NOT_FOUND_ERROR = "Файл 'hiking_items.json' не найден"
