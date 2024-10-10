@@ -33,7 +33,7 @@ def reset_progress(user_id):
 
 def read_lists():
     try:
-        with open('hiking_lists.json', 'r', encoding='utf-8') as file:
+        with open('hiking_items.json', 'r', encoding='utf-8') as file:
             data = json.load(file)
             return data['lists']
     except FileNotFoundError:
